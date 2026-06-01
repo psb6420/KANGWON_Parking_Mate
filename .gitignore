@@ -1,0 +1,8 @@
+*.log
+server.out.log
+server.err.log
+verification-*.png
+verification-*.jpg
+node_modules/
+.env
+.env.*

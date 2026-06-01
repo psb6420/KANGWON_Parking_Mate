@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>15099883 강원 주차장 지도</title>
+    <style>
+      :root {
+        --ink: #172033;
+        --muted: #607086;
+        --line: #d9e2ec;
+        --panel: #ffffff;
+        --bg: #f6f8fb;
+        --accent: #4b1f1f;
+        --blue: #1976d2;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--ink);
+        background: var(--bg);
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      .app {
+        display: grid;
+        grid-template-columns: 390px minmax(0, 1fr);
+        min-height: 100vh;
+      }
+
+      .sidebar {
+        overflow: auto;
+        max-height: 100vh;
+        padding: 22px;
+        background: var(--panel);
+        border-right: 1px solid var(--line);
+      }
+
+      .brand {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 22px;
+      }
+
+      .brand-mark {
+        display: grid;
+        width: 40px;
+        height: 40px;
+        place-items: center;
+        border-radius: 8px;
+        background: #ffe100;
+        color: #111;
+        font-size: 22px;
+        font-weight: 800;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 22px;
+        line-height: 1.2;
+      }
+
+      .description,
+      .hint,
+      .status,
+      .result-item span,
+      .summary {
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.55;
+      }
+
+      .description {
+        margin: 5px 0 0;
+      }
+
+      .form-section {
+        display: grid;
+        gap: 10px;
+        margin-bottom: 16px;
+      }
+
+      label {
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      input,
+      button {
+        height: 40px;
+        border-radius: 8px;
+        font: inherit;
+      }
+
+      input {
+        width: 100%;
+        padding: 0 12px;
+        border: 1px solid var(--line);
+        background: #fff;
+      }
+
+      input:focus {
+        outline: none;
+        border-color: var(--blue);
+        box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.14);
+      }
+
+      button {
+        border: 0;
+        padding: 0 14px;
+        cursor: pointer;
+        font-weight: 800;
+      }
+
+      button:disabled {
+        cursor: wait;
+        opacity: 0.65;
+      }
+
+      .primary-button {
+        width: 100%;
+        color: #fff;
+        background: var(--accent);
+      }
+
+      .secondary-button {
+        width: 100%;
+        color: #172033;
+        background: #edf3f8;
+      }
+
+      .status,
+      .summary {
+        margin: 16px 0;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #f8fbff;
+      }
+
+      .summary strong {
+        display: block;
+        margin-bottom: 4px;
+        color: var(--ink);
+        font-size: 14px;
+      }
+
+      .results {
+        display: grid;
+        gap: 8px;
+      }
+
+      .result-item {
+        display: grid;
+        gap: 4px;
+        width: 100%;
+        height: auto;
+        min-height: 74px;
+        padding: 11px 12px;
+        text-align: left;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .result-item strong {
+        font-size: 14px;
+      }
+
+      .map-wrap {
+        position: relative;
+        min-width: 0;
+      }
+
+      #map {
+        width: 100%;
+        height: 100vh;
+      }
+
+      .map-loading {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        background: #fff;
+        color: var(--muted);
+      }
+
+      .map-ready .map-loading {
+        display: none;
+      }
+
+      @media (max-width: 840px) {
+        .app {
+          grid-template-columns: 1fr;
+        }
+
+        .sidebar {
+          max-height: none;
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+        }
+
+        #map {
+          height: 62vh;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">K</div>
+          <div>
+            <h1>15099883 강원 주차장 지도</h1>
+            <p class="description">PrkSttusInfo 전체 페이지를 서버에서 순회 호출하고 강원 주차장을 지도에 표시합니다.</p>
+          </div>
+        </div>
+
+        <section class="form-section">
+          <label for="kakaoKey">카카오맵 JavaScript 키</label>
+          <input id="kakaoKey" type="password" placeholder="Kakao JavaScript 키 입력" autocomplete="off" />
+
+          <label for="serviceKey">공공데이터포털 서비스키</label>
+          <input id="serviceKey" type="password" placeholder="serviceKey 입력" autocomplete="off" />
+
+          <button class="primary-button" type="button" id="loadButton">전체 불러오기</button>
+          <button class="secondary-button" type="button" id="clearButton">마커 지우기</button>
+          <p class="hint">
+            키는 저장하지 않고 호출 시에만 사용합니다. 서버가 pageNo와 numOfRows를 자동으로 넣어 전체 페이지를 호출합니다.
+          </p>
+        </section>
+
+        <div class="status" id="status">카카오맵 JavaScript 키와 공공데이터포털 서비스키를 입력한 뒤 전체 불러오기를 누르세요.</div>
+        <section class="summary" id="summary" hidden></section>
+        <section class="results" id="results" aria-live="polite"></section>
+      </aside>
+
+      <section class="map-wrap" id="mapWrap">
+        <div id="map"></div>
+        <div class="map-loading">지도가 표시됩니다.</div>
+      </section>
+    </main>
+
+    <script>
+      const DEFAULT_POSITION = { lat: 37.566826, lng: 126.9786567 };
+
+      let map;
+      let infoWindow;
+      let centerMarker;
+      let lastRenderedMarkerCount = 0;
+      let kakaoSdkLoadingPromise = null;
+      const parkingMarkers = [];
+
+      const mapWrapEl = document.querySelector("#mapWrap");
+      const statusEl = document.querySelector("#status");
+      const summaryEl = document.querySelector("#summary");
+      const resultsEl = document.querySelector("#results");
+      const kakaoKeyInput = document.querySelector("#kakaoKey");
+      const serviceKeyInput = document.querySelector("#serviceKey");
+      const loadButton = document.querySelector("#loadButton");
+      const clearButton = document.querySelector("#clearButton");
+
+      function setStatus(message) {
+        statusEl.textContent = message;
+      }
+
+      function loadKakaoSdk() {
+        if (map) return Promise.resolve();
+        if (kakaoSdkLoadingPromise) return kakaoSdkLoadingPromise;
+
+        const kakaoKey = kakaoKeyInput.value.trim();
+        if (!kakaoKey) {
+          setStatus("카카오맵 JavaScript 키를 입력하세요.");
+          kakaoKeyInput.focus();
+          return Promise.reject(new Error("Kakao JavaScript key is required."));
+        }
+
+        kakaoSdkLoadingPromise = new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(kakaoKey)}&autoload=false`;
+          script.async = true;
+          script.onload = () => {
+            if (!window.kakao || !window.kakao.maps) {
+              setStatus("카카오 지도 SDK 객체를 찾지 못했습니다.");
+              reject(new Error("Kakao Maps SDK object was not found."));
+              return;
+            }
+            window.kakao.maps.load(() => {
+              initMap();
+              resolve();
+            });
+          };
+          script.onerror = () => {
+            kakaoSdkLoadingPromise = null;
+            setStatus("카카오 지도 SDK 로드에 실패했습니다. JavaScript 키와 Web 플랫폼 도메인을 확인하세요.");
+            reject(new Error("Failed to load Kakao Maps SDK."));
+          };
+          document.head.appendChild(script);
+        });
+
+        return kakaoSdkLoadingPromise;
+      }
+
+      function initMap() {
+        const center = new kakao.maps.LatLng(DEFAULT_POSITION.lat, DEFAULT_POSITION.lng);
+        map = new kakao.maps.Map(document.querySelector("#map"), { center, level: 7 });
+        infoWindow = new kakao.maps.InfoWindow({ removable: true });
+        centerMarker = new kakao.maps.Marker({ position: center, map });
+        mapWrapEl.classList.add("map-ready");
+        setStatus("서비스키를 확인한 뒤 전체 데이터를 호출합니다.");
+      }
+
+      function getServiceKey() {
+        return serviceKeyInput.value.trim();
+      }
+
+      async function loadAllParkingFacilities() {
+        const serviceKey = getServiceKey();
+        loadButton.disabled = true;
+        summaryEl.hidden = true;
+        resultsEl.innerHTML = "";
+
+        try {
+          await loadKakaoSdk();
+          setStatus("15099883 PrkSttusInfo 전체 페이지를 호출하는 중입니다. 데이터가 많아 시간이 걸릴 수 있습니다.");
+
+          let payload = await requestParkingAll(serviceKey, true);
+          while (payload.status === "running") {
+            const rowsToRender = getRowsToRender(payload);
+            if (rowsToRender.length && rowsToRender.length !== lastRenderedMarkerCount) {
+              renderParkingRows(rowsToRender);
+            }
+            renderSummary(payload);
+            setStatus(
+              `전체 호출 중입니다. ${formatNumber(payload.fetchedPages)} / ${formatNumber(
+                payload.request?.requestedPages || 0,
+              )}페이지 완료, 강원 포함 페이지 ${formatNumber(payload.gangwonPages?.length || 0)}개 확인.`,
+            );
+            await wait(2500);
+            payload = await requestParkingAll(serviceKey, false);
+          }
+
+          renderParkingRows(getRowsToRender(payload));
+          renderSummary(payload);
+          setStatus(
+            `전체 ${formatNumber(payload.totalCount)}건을 ${payload.fetchedPages}페이지로 불러왔습니다. 지도에는 강원 좌표 ${formatNumber(
+              getRowsToRender(payload).length,
+            )}건을 표시했습니다.`,
+          );
+        } catch (error) {
+          setStatus(`주차장 전체 호출 실패: ${error.message}`);
+        } finally {
+          loadButton.disabled = false;
+        }
+      }
+
+      async function requestParkingAll(serviceKey, refresh) {
+        const params = new URLSearchParams();
+        if (serviceKey) params.set("serviceKey", serviceKey);
+        if (refresh) params.set("refresh", "1");
+        const response = await fetch(`/api/parking/all?${params.toString()}`);
+        const text = await response.text();
+        const payload = parseMaybeJson(text);
+        if (!response.ok && response.status !== 202) {
+          const message = typeof payload === "object" ? payload.message || payload.error : payload;
+          throw new Error(message || "API 호출 실패");
+        }
+        return payload;
+      }
+
+      function renderSummary(payload) {
+        const hiddenRows = Math.max(0, Number(payload.totalMappableCount || 0) - Number(payload.data?.length || 0));
+        const hiddenGangwonRows = Math.max(0, Number(payload.gangwonMappableCount || 0) - Number(payload.gangwonData?.length || 0));
+        const gangwonPages = payload.gangwonPages?.length ? payload.gangwonPages.join(", ") : "없음";
+        summaryEl.hidden = false;
+        summaryEl.innerHTML = `
+          <strong>전체 호출 결과</strong>
+          <div>총 데이터: ${formatNumber(payload.totalCount)}건</div>
+          <div>호출 페이지: ${formatNumber(payload.fetchedPages)} / ${formatNumber(payload.request?.requestedPages || 0)}페이지</div>
+          <div>좌표 있는 데이터: ${formatNumber(payload.totalMappableCount)}건</div>
+          <div>전국 마커 후보: ${formatNumber(payload.data?.length || 0)}건${
+            hiddenRows ? `, 브라우저 보호로 ${formatNumber(hiddenRows)}건은 응답에서 제외` : ""
+          }</div>
+          <div>강원 데이터 건수: ${formatNumber(payload.gangwonCount)}건</div>
+          <div>강원 좌표 데이터: ${formatNumber(payload.gangwonMappableCount)}건</div>
+          <div>강원 마커 표시: ${formatNumber(payload.gangwonData?.length || 0)}건${
+            hiddenGangwonRows ? `, 브라우저 보호로 ${formatNumber(hiddenGangwonRows)}건은 응답에서 제외` : ""
+          }</div>
+          <div>강원 지역이 나오는 페이지 번호: ${escapeHtml(gangwonPages)}</div>
+          <div>호출 실패 페이지: ${payload.failedPages?.length ? escapeHtml(payload.failedPages.join(", ")) : "없음"}</div>
+        `;
+      }
+
+      function getRowsToRender(payload) {
+        if (payload.gangwonData?.length) return payload.gangwonData;
+        return payload.data || [];
+      }
+
+      function renderParkingRows(rows) {
+        clearParkingMarkers();
+        resultsEl.innerHTML = "";
+        lastRenderedMarkerCount = rows.length;
+
+        if (!rows.length) {
+          renderEmptyResult("표시할 주차장이 없습니다.", "API 응답에 위도/경도가 있는 항목이 없습니다.");
+          return;
+        }
+
+        const bounds = new kakao.maps.LatLngBounds();
+        rows.forEach((item) => {
+          const position = new kakao.maps.LatLng(Number(item.lat), Number(item.lng));
+          const marker = new kakao.maps.Marker({ position, map });
+          parkingMarkers.push(marker);
+          bounds.extend(position);
+          kakao.maps.event.addListener(marker, "click", () => showParkingInfo(marker, item));
+        });
+
+        rows.slice(0, 100).forEach((item, index) => {
+          resultsEl.appendChild(createResultButton(item, parkingMarkers[index]));
+        });
+
+        map.setBounds(bounds);
+        centerMarker.setMap(null);
+      }
+
+      function createResultButton(item, marker) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "result-item";
+        button.innerHTML = `
+          <strong>${escapeHtml(item.name || "주차장")}</strong>
+          <span>관리번호: ${escapeHtml(item.managementNo || "-")} · 원본 페이지 ${escapeHtml(item.sourcePageNo || "-")}</span>
+          <span>${escapeHtml(item.address || "주소 없음")}</span>
+          <span>총 ${escapeHtml(item.total || "-")}면 · 위도 ${escapeHtml(item.lat)} · 경도 ${escapeHtml(item.lng)}</span>
+        `;
+        button.addEventListener("click", () => {
+          const position = marker.getPosition();
+          map.setCenter(position);
+          showParkingInfo(marker, item);
+        });
+        return button;
+      }
+
+      function showParkingInfo(marker, item) {
+        infoWindow.setContent(`
+          <div style="padding:12px 14px;min-width:230px;font-size:13px;line-height:1.55">
+            <strong>${escapeHtml(item.name || "주차장")}</strong><br>
+            <span>관리번호: ${escapeHtml(item.managementNo || "-")}</span><br>
+            <span>원본 페이지: ${escapeHtml(item.sourcePageNo || "-")}</span><br>
+            <span>총 ${escapeHtml(item.total || "-")}면</span><br>
+            <span>${escapeHtml(item.address || "")}</span>
+          </div>
+        `);
+        infoWindow.open(map, marker);
+      }
+
+      function clearParkingMarkers() {
+        parkingMarkers.forEach((marker) => marker.setMap(null));
+        parkingMarkers.length = 0;
+        lastRenderedMarkerCount = 0;
+        resultsEl.innerHTML = "";
+        if (centerMarker) centerMarker.setMap(map);
+      }
+
+      function renderEmptyResult(title, detail) {
+        const item = document.createElement("div");
+        item.className = "result-item";
+        item.innerHTML = `<strong>${escapeHtml(title)}</strong><span>${escapeHtml(detail)}</span>`;
+        resultsEl.appendChild(item);
+      }
+
+      function parseMaybeJson(text) {
+        try {
+          return JSON.parse(text);
+        } catch {
+          return text;
+        }
+      }
+
+      function wait(ms) {
+        return new Promise((resolve) => setTimeout(resolve, ms));
+      }
+
+      function formatNumber(value) {
+        return Number(value || 0).toLocaleString();
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      loadButton.addEventListener("click", loadAllParkingFacilities);
+      clearButton.addEventListener("click", () => {
+        clearParkingMarkers();
+        setStatus("마커를 지웠습니다.");
+      });
+    </script>
+  </body>
+</html>
