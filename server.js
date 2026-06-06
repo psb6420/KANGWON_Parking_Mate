@@ -1205,7 +1205,7 @@ async function proxyParkingRealtimeRefresh(reqUrl, res) {
   sendJson(res, status, publicState(job.state));
 }
 
-const server = http.createServer((req, res) => {
+function requestHandler(req, res) {
   const reqUrl = new URL(req.url, `http://localhost:${PORT}`);
 
   if (
@@ -1223,8 +1223,13 @@ const server = http.createServer((req, res) => {
   }
 
   serveFile(reqUrl, res);
-});
+}
 
-server.listen(PORT, "127.0.0.1", () => {
-  console.log(`Kakao parking app: http://localhost:${PORT}/`);
-});
+if (require.main === module) {
+  const server = http.createServer(requestHandler);
+  server.listen(PORT, "127.0.0.1", () => {
+    console.log(`Kakao parking app: http://localhost:${PORT}/`);
+  });
+}
+
+module.exports = requestHandler;
