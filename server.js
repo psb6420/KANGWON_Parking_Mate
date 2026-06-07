@@ -1205,8 +1205,20 @@ async function proxyParkingRealtimeRefresh(reqUrl, res) {
   sendJson(res, status, publicState(job.state));
 }
 
+function proxyClientConfig(res) {
+  sendJson(res, 200, {
+    kakaoJavascriptKey: process.env.KAKAO_JAVASCRIPT_KEY || "",
+    hasDataServiceKey: Boolean(process.env.DATA_GO_KR_SERVICE_KEY),
+  });
+}
+
 function requestHandler(req, res) {
   const reqUrl = new URL(req.url, `http://localhost:${PORT}`);
+
+  if (reqUrl.pathname === "/api/config") {
+    proxyClientConfig(res);
+    return;
+  }
 
   if (
     reqUrl.pathname === "/api/parking/gangwon-realtime" ||

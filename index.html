@@ -387,6 +387,22 @@
         statusEl.textContent = message;
       }
 
+      let clientConfigLoadingPromise = null;
+
+      function loadClientConfig() {
+        if (clientConfigLoadingPromise) return clientConfigLoadingPromise;
+        clientConfigLoadingPromise = fetch("/api/config")
+          .then((response) => (response.ok ? response.json() : {}))
+          .then((config) => {
+            const kakaoKey = String(config.kakaoJavascriptKey || "").trim();
+            if (kakaoKey && !kakaoKeyInput.value.trim()) {
+              kakaoKeyInput.value = kakaoKey;
+            }
+          })
+          .catch(() => {});
+        return clientConfigLoadingPromise;
+      }
+
       function loadKakaoSdk() {
         if (map) return Promise.resolve();
         if (kakaoSdkLoadingPromise) return kakaoSdkLoadingPromise;
@@ -456,6 +472,7 @@
         stopRealtimeAutoRefresh();
 
         try {
+          await loadClientConfig();
           await loadKakaoSdk();
           setStatus(
             "강원 시설정보를 수집하고 실시간 정보 제공 주차장을 찾는 중입니다.",
