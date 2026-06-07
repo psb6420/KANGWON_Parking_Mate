@@ -85,8 +85,13 @@ function serveFile(reqUrl, res) {
 
 function appendServiceKey(url, serviceKey) {
   const separator = url.includes("?") ? "&" : "?";
-  const value = /%[0-9a-f]{2}/i.test(serviceKey) ? serviceKey : encodeURIComponent(serviceKey);
+  const cleanKey = cleanSecret(serviceKey);
+  const value = /%[0-9a-f]{2}/i.test(cleanKey) ? cleanKey : encodeURIComponent(cleanKey);
   return `${url}${separator}serviceKey=${value}`;
+}
+
+function cleanSecret(value) {
+  return String(value || "").replace(/^\uFEFF/, "").trim();
 }
 
 function isFiniteKoreaCoordinate(lat, lng) {
@@ -1207,8 +1212,8 @@ async function proxyParkingRealtimeRefresh(reqUrl, res) {
 
 function proxyClientConfig(res) {
   sendJson(res, 200, {
-    kakaoJavascriptKey: process.env.KAKAO_JAVASCRIPT_KEY || "",
-    hasDataServiceKey: Boolean(process.env.DATA_GO_KR_SERVICE_KEY),
+    kakaoJavascriptKey: cleanSecret(process.env.KAKAO_JAVASCRIPT_KEY),
+    hasDataServiceKey: Boolean(cleanSecret(process.env.DATA_GO_KR_SERVICE_KEY)),
   });
 }
 
