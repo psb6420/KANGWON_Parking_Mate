@@ -6,7 +6,7 @@ const { generateRecommendationReason } = require("../services/gemini");
 const { searchKakaoPlace, searchKakaoParkingNearby } = require("../services/publicApi");
 
 // POST /api/recommend
-// 목적지 입력 → ParkingScore 계산 → 상위 5개 추천 (LLM 이유 포함)
+// 목적지 입력 → ParkingScore 계산 → 상위 3개 추천 (LLM 이유 포함)
 // Body: { destination: "안목해변", lat?: number, lng?: number, radius?: number }
 router.post("/", async (req, res) => {
   const { destination, lat, lng, radius = 1500 } = req.body;
@@ -102,7 +102,7 @@ router.post("/", async (req, res) => {
 
     // 5. ParkingScore 계산 및 순위 정렬
     const ranked = rankParkingLots(allLots, destLat, destLng);
-    const topLots = ranked.slice(0, 5);
+    const topLots = ranked.slice(0, 3);
 
     // 6. 1위 주차장에 LLM 추천 이유 생성
     let llmReason = null;

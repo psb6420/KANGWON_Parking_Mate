@@ -14,9 +14,8 @@ const SYSTEM_PROMPT = `너는 강원도 관광객을 위한 친절한 주차 안
  * @param {string} params.parkingName - 주차장 이름
  * @param {number} params.availableSpots - 잔여 주차면수
  * @param {number} params.walkMin - 도보 시간 (분)
- * @param {string} params.weather - 현재 날씨 설명
- * @param {string} params.eventInfo - 근처 행사 정보
- * @param {number} params.score - ParkingScore
+ * @param {number} params.score - ParkingScore (0~100)
+ * @param {string} params.congestionLabel - smooth | normal | congested
  * @returns {Promise<string>} 추천 이유 텍스트
  */
 async function generateRecommendationReason(params) {
@@ -57,14 +56,12 @@ async function generateRecommendationReason(params) {
   }
 }
 
-function buildPrompt({ destinationName, parkingName, availableSpots, walkMin, weather, eventInfo, score }) {
+function buildPrompt({ destinationName, parkingName, availableSpots, walkMin, score }) {
   return [
     `- 목적지: ${destinationName}`,
     `- 주차장명: ${parkingName}`,
     `- 잔여면수: ${availableSpots != null ? `${availableSpots}면` : "정보 없음"}`,
     `- 도보거리: ${walkMin}분`,
-    `- 날씨: ${weather || "정보 없음"}`,
-    `- 특이사항: ${eventInfo || "없음"}`,
     `- ParkingScore: ${score}점 (100점 만점)`,
   ].join("\n");
 }
