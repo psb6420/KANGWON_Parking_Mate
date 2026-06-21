@@ -45,6 +45,34 @@
         display: grid;
         grid-template-columns: 392px minmax(0, 1fr);
         min-height: 100vh;
+        padding-bottom: 76px;
+      }
+
+      .app.view-home {
+        display: block;
+      }
+
+      .app.view-home .sidebar {
+        max-width: 480px;
+        min-height: calc(100vh - 76px);
+        margin: 0 auto;
+        border-right: 0;
+      }
+
+      .app.view-home .map-wrap {
+        display: none;
+      }
+
+      .app.view-map {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .app.view-map .sidebar {
+        display: none;
+      }
+
+      .app.view-map #map {
+        height: calc(100vh - 76px);
       }
 
       .sidebar {
@@ -419,6 +447,40 @@
         margin: 0;
       }
 
+      .bottom-tabs {
+        position: fixed;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        z-index: 20;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+        border-top: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.96);
+        box-shadow: 0 -12px 30px rgba(22, 35, 54, 0.12);
+        backdrop-filter: blur(10px);
+      }
+
+      .tab-button {
+        display: inline-grid;
+        height: 48px;
+        place-items: center;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        color: var(--muted);
+        font-size: 14px;
+        font-weight: 850;
+      }
+
+      .tab-button[aria-selected="true"] {
+        border-color: rgba(23, 105, 224, 0.35);
+        background: var(--blue);
+        color: #fff;
+      }
+
       @media (max-width: 920px) {
         .app {
           grid-template-columns: 1fr;
@@ -431,7 +493,7 @@
         }
 
         #map {
-          height: 68vh;
+          height: calc(100vh - 76px);
         }
 
         .map-toolbar {
@@ -449,7 +511,7 @@
     </style>
   </head>
   <body>
-    <main class="app">
+    <main class="app view-home" id="appShell">
       <aside class="sidebar">
         <div class="brand">
           <div class="brand-mark">P</div>
@@ -460,38 +522,6 @@
             </p>
           </div>
         </div>
-
-        <section class="control-panel">
-          <div class="form-section">
-            <label for="kakaoKey">카카오맵 JavaScript 키</label>
-            <input
-              id="kakaoKey"
-              type="password"
-              placeholder="Kakao JavaScript 키 입력"
-              autocomplete="off"
-            />
-
-            <label for="serviceKey">공공데이터포털 서비스키</label>
-            <input
-              id="serviceKey"
-              type="password"
-              placeholder="serviceKey 입력"
-              autocomplete="off"
-            />
-
-            <div class="button-row">
-              <button class="primary-button" type="button" id="loadButton">
-                실시간 주차 불러오기
-              </button>
-              <button class="secondary-button" type="button" id="clearButton">
-                초기화
-              </button>
-            </div>
-            <p class="hint">
-              시설정보, 운영정보, 실시간 정보를 병합해 좌표가 확인되는 강원 주차장만 지도에 표시합니다.
-            </p>
-          </div>
-        </section>
 
         <section class="metric-grid" aria-label="주차 데이터 요약">
           <div class="metric">
@@ -509,21 +539,9 @@
         </section>
 
         <div class="status" id="status">
-          키를 확인한 뒤 강원 실시간 주차장을 불러오세요.
+          강릉 실시간 주차 정보를 자동으로 불러오는 중입니다.
         </div>
         <section class="summary" id="summary" hidden></section>
-        <details class="api-responses" id="facilityResponses" hidden>
-          <summary>PrkSttusInfo 시설정보 API 응답 11건</summary>
-          <pre id="facilityResponseJson"></pre>
-        </details>
-        <details class="api-responses" id="realtimeResponses" hidden>
-          <summary>PrkRealtimeInfo 실시간정보 API 응답 11건</summary>
-          <pre id="realtimeResponseJson"></pre>
-        </details>
-        <details class="api-responses" id="operationResponses" hidden>
-          <summary>PrkOprInfo 운영정보 API 응답 11건</summary>
-          <pre id="operationResponseJson"></pre>
-        </details>
         <details class="api-responses" id="gangneungInfoResponses" hidden>
           <summary>getParkInfo 강릉시 주차장 정보 API 응답</summary>
           <pre id="gangneungInfoResponseJson"></pre>
@@ -555,6 +573,14 @@
         <div class="map-loading">지도가 표시됩니다.</div>
       </section>
     </main>
+    <nav class="bottom-tabs" aria-label="하단 화면 탭">
+      <button class="tab-button" type="button" data-view="home" aria-selected="true">
+        홈
+      </button>
+      <button class="tab-button" type="button" data-view="map" aria-selected="false">
+        지도
+      </button>
+    </nav>
 
     <script>
       const DEFAULT_POSITION = { lat: 37.8228, lng: 128.1555 };
@@ -580,22 +606,9 @@
       window.__parkingDebug = { positions: [] };
 
       const mapWrapEl = document.querySelector("#mapWrap");
+      const appShellEl = document.querySelector("#appShell");
       const statusEl = document.querySelector("#status");
       const summaryEl = document.querySelector("#summary");
-      const facilityResponsesEl = document.querySelector("#facilityResponses");
-      const facilityResponseJsonEl = document.querySelector(
-        "#facilityResponseJson",
-      );
-      const realtimeResponsesEl = document.querySelector("#realtimeResponses");
-      const realtimeResponseJsonEl = document.querySelector(
-        "#realtimeResponseJson",
-      );
-      const operationResponsesEl = document.querySelector(
-        "#operationResponses",
-      );
-      const operationResponseJsonEl = document.querySelector(
-        "#operationResponseJson",
-      );
       const gangneungInfoResponsesEl = document.querySelector(
         "#gangneungInfoResponses",
       );
@@ -609,17 +622,31 @@
         "#gangneungRealtimeResponseJson",
       );
       const resultsEl = document.querySelector("#results");
-      const kakaoKeyInput = document.querySelector("#kakaoKey");
-      const serviceKeyInput = document.querySelector("#serviceKey");
-      const loadButton = document.querySelector("#loadButton");
-      const clearButton = document.querySelector("#clearButton");
       const metricLotsEl = document.querySelector("#metricLots");
       const metricRealtimeEl = document.querySelector("#metricRealtime");
       const metricRefreshEl = document.querySelector("#metricRefresh");
       const parkingPanelEl = document.querySelector("#parkingPanel");
+      const tabButtons = [...document.querySelectorAll(".tab-button")];
+      let clientKakaoKey = "";
+      let latestMapBounds = null;
 
       function setStatus(message) {
         statusEl.textContent = message;
+      }
+
+      function setActiveView(view) {
+        const nextView = view === "map" ? "map" : "home";
+        appShellEl.classList.toggle("view-home", nextView === "home");
+        appShellEl.classList.toggle("view-map", nextView === "map");
+        tabButtons.forEach((button) => {
+          button.setAttribute("aria-selected", String(button.dataset.view === nextView));
+        });
+        if (nextView === "map" && map) {
+          setTimeout(() => {
+            map.relayout();
+            if (latestMapBounds) map.setBounds(latestMapBounds);
+          }, 80);
+        }
       }
 
       let clientConfigLoadingPromise = null;
@@ -630,9 +657,7 @@
           .then((response) => (response.ok ? response.json() : {}))
           .then((config) => {
             const kakaoKey = String(config.kakaoJavascriptKey || "").trim();
-            if (kakaoKey && !kakaoKeyInput.value.trim()) {
-              kakaoKeyInput.value = kakaoKey;
-            }
+            if (kakaoKey) clientKakaoKey = kakaoKey;
           })
           .catch(() => {});
         return clientConfigLoadingPromise;
@@ -642,10 +667,9 @@
         if (map) return Promise.resolve();
         if (kakaoSdkLoadingPromise) return kakaoSdkLoadingPromise;
 
-        const kakaoKey = kakaoKeyInput.value.trim();
+        const kakaoKey = clientKakaoKey;
         if (!kakaoKey) {
-          setStatus("카카오맵 JavaScript 키를 입력하세요.");
-          kakaoKeyInput.focus();
+          setStatus("로컬 .env에 KAKAO_JAVASCRIPT_KEY를 설정한 뒤 서버를 재시작하세요.");
           return Promise.reject(new Error("Kakao JavaScript key is required."));
         }
         kakaoSdkLoadingPromise = new Promise((resolve, reject) => {
@@ -694,13 +718,12 @@
       }
 
       function getServiceKey() {
-        return serviceKeyInput.value.trim();
+        return "";
       }
 
       async function loadParking() {
         const serviceKey = getServiceKey();
         activeServiceKey = serviceKey;
-        loadButton.disabled = true;
         summaryEl.hidden = true;
         clearApiResponses();
         resultsEl.innerHTML = "";
@@ -742,8 +765,6 @@
           startRealtimeAutoRefresh(serviceKey);
         } catch (error) {
           setStatus(`주차장 호출 실패: ${error.message}`);
-        } finally {
-          loadButton.disabled = false;
         }
       }
 
@@ -849,74 +870,25 @@
           <div>대상 지역: ${escapeHtml(payload.targetRegion || "강원")}</div>
           <div>지역 필터: ${escapeHtml(payload.regionFilterMode || "response-address-field")}</div>
           <div>사용 API: ${(payload.sourceApis || []).map(escapeHtml).join(", ")}</div>
-          <div>시설정보 단계: ${formatPhase(payload.phases?.facility)}</div>
-          <div>실시간정보 단계: ${formatPhase(payload.phases?.realtime)}</div>
-          <div>운영정보 단계: ${formatPhase(payload.phases?.operation)}</div>
-          <div>강원 시설 데이터: ${formatNumber(payload.facilityCount)}건</div>
-          <div>강원 좌표 데이터: ${formatNumber(payload.facilityMappableCount)}건</div>
           <div>실시간 정보 매칭: ${formatNumber(payload.realtimeMatchedCount)}건</div>
-          <div>PrkRealtimeInfo 새 호출: ${escapeHtml(formatRealtimeApiFetch(payload.realtimeApiFetch))}</div>
-          <div>운영 정보 매칭: ${formatNumber(payload.operationMatchedCount)}건</div>
           <div>지도 표시: ${formatNumber(payload.data?.length || 0)}건</div>
           <div>실시간 갱신 주기: 5분</div>
           <div>마지막 실시간 갱신: ${escapeHtml(formatDateTime(payload.lastRealtimeRefreshedAt))}</div>
           <div>다음 실시간 갱신 예정: ${escapeHtml(formatDateTime(payload.nextRealtimeRefreshAt))}</div>
           <div>다음 갱신까지: <strong id="refreshCountdown">${escapeHtml(formatCountdown(payload.nextRealtimeRefreshAt))}</strong></div>
-          <div>최근 자리수 변경: ${escapeHtml(formatServerComparison(payload.realtimeComparison) || formatChangeSummary())}</div>
-          <div>첫 API 호출 대비: ${escapeHtml(formatServerComparison(payload.realtimeBaselineComparison) || "-")}</div>
-          <div>15099883 최근 자리수 변경: ${escapeHtml(formatServerComparison(payload.realtimeComparison) || "-")}</div>
-          <div>15099883 첫 API 호출 대비: ${escapeHtml(formatServerComparison(payload.realtimeBaselineComparison) || "-")}</div>
-          <div>15140011 최근 자리수 변경: ${escapeHtml(formatServerComparison(payload.gangneungRealtimeComparison) || "-")}</div>
-          <div>15140011 첫 API 호출 대비: ${escapeHtml(formatServerComparison(payload.gangneungRealtimeBaselineComparison) || "-")}</div>
-          <div>변화 로그: ${escapeHtml(payload.realtimeChangeLogFile || "-")}</div>
+          <div>최근 자리수 변경: ${escapeHtml(formatServerComparison(payload.gangneungRealtimeComparison) || formatChangeSummary())}</div>
+          <div>첫 호출 대비: ${escapeHtml(formatServerComparison(payload.gangneungRealtimeBaselineComparison) || "-")}</div>
         `;
         renderApiResponses(payload.data || []);
         updateRefreshSchedule(payload);
       }
 
       function renderApiResponses(rows) {
-        const oldEntries = rows.flatMap((row) =>
-          (row.sourceEntries || [])
-            .filter((entry) => entry.apiSource === "15099883")
-            .map((entry) => ({ row, entry })),
-        );
         const gangneungEntries = rows.flatMap((row) =>
           (row.sourceEntries || [])
             .filter((entry) => entry.apiSource === "15140011")
             .map((entry) => ({ row, entry })),
         );
-        renderApiResponseSection({
-          detailsEl: facilityResponsesEl,
-          preEl: facilityResponseJsonEl,
-          sourceApi: "PrkSttusInfo",
-          rows: oldEntries
-            .filter(({ entry }) => entry.raw?.PrkSttusInfo)
-            .map(({ row, entry }) =>
-              baseApiRow(row, entry, { PrkSttusInfo: entry.raw.PrkSttusInfo }),
-            ),
-        });
-        renderApiResponseSection({
-          detailsEl: realtimeResponsesEl,
-          preEl: realtimeResponseJsonEl,
-          sourceApi: "PrkRealtimeInfo",
-          rows: oldEntries
-            .filter(({ entry }) => entry.raw?.PrkRealtimeInfo)
-            .map(({ row, entry }) =>
-              baseApiRow(row, entry, {
-                PrkRealtimeInfo: entry.raw.PrkRealtimeInfo,
-              }),
-            ),
-        });
-        renderApiResponseSection({
-          detailsEl: operationResponsesEl,
-          preEl: operationResponseJsonEl,
-          sourceApi: "PrkOprInfo",
-          rows: oldEntries
-            .filter(({ entry }) => entry.raw?.PrkOprInfo)
-            .map(({ row, entry }) =>
-              baseApiRow(row, entry, { PrkOprInfo: entry.raw.PrkOprInfo }),
-            ),
-        });
         renderApiResponseSection({
           detailsEl: gangneungInfoResponsesEl,
           preEl: gangneungInfoResponseJsonEl,
@@ -974,9 +946,6 @@
 
       function clearApiResponses() {
         [
-          [facilityResponsesEl, facilityResponseJsonEl],
-          [realtimeResponsesEl, realtimeResponseJsonEl],
-          [operationResponsesEl, operationResponseJsonEl],
           [gangneungInfoResponsesEl, gangneungInfoResponseJsonEl],
           [gangneungRealtimeResponsesEl, gangneungRealtimeResponseJsonEl],
         ].forEach(([detailsEl, preEl]) => {
@@ -993,9 +962,8 @@
       function phaseLabel(phase) {
         return (
           {
-            facility: "시설정보",
-            realtime: "실시간정보",
-            operation: "운영정보",
+            "gangneung-info": "강릉 주차장 정보",
+            "gangneung-realtime": "강릉 실시간 정보",
             complete: "완료",
           }[phase] ||
           phase ||
@@ -1057,6 +1025,7 @@
         });
 
         const center = averagePosition(displayRows.map((row) => row.position));
+        latestMapBounds = bounds;
         map.setBounds(bounds);
         if (parkingMarkers.length > 1 && map.getLevel() < 6) map.setLevel(6);
         setTimeout(() => {
@@ -1504,20 +1473,11 @@
           .replaceAll("'", "&#039;");
       }
 
-      loadButton.addEventListener("click", loadParking);
-      clearButton.addEventListener("click", () => {
-        clearParkingMarkers();
-        metricLotsEl.textContent = "0";
-        metricRealtimeEl.textContent = "0";
-        metricRefreshEl.textContent = "--";
-        parkingPanelEl.innerHTML = `
-          <h2>주차장을 선택하세요</h2>
-          <p class="panel-meta">
-            실시간 주차장을 불러온 뒤 목록 또는 지도 마커를 누르면 잔여면과 운영 정보가 여기에 표시됩니다.
-          </p>
-        `;
-        setStatus("마커를 지웠습니다.");
+      tabButtons.forEach((button) => {
+        button.addEventListener("click", () => setActiveView(button.dataset.view));
       });
+
+      loadParking();
     </script>
   </body>
 </html>

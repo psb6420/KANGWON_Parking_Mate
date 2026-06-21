@@ -108,7 +108,7 @@ Content-Type: application/json
         "availScore": 70,        // 잔여면수 점수 (50% 반영)
         "distScore": 96          // 거리 점수 (50% 반영)
       },
-      "source": "arduino",       // arduino | tsafety | kakao
+      "source": "arduino",       // arduino | gangneung | kakao
       "updatedAt": "2026-06-12T13:00:00.000Z"
     },
     { "rank": 2, "..." : "..." },

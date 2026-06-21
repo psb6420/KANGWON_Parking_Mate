@@ -1,4 +1,5 @@
 .vercel
+.env
 backend/.env
 backend/*.db
 backend/*.db-shm

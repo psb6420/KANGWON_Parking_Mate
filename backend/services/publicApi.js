@@ -1,6 +1,5 @@
 const fetch = require("node-fetch");
 
-const BASE_TSAFETY = "https://apis.data.go.kr/B553881/Parking";
 const BASE_GANGNEUNG = "https://apis.data.go.kr/4201000/GNitsTrafficInfoService_1.0";
 const BASE_WEATHER = "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0";
 const BASE_TOURISM = "https://apis.data.go.kr/B551011/KorService1";
@@ -30,44 +29,10 @@ async function fetchJson(url, options = {}) {
   }
 }
 
-// 한국교통안전공단 주차장 시설 정보
-async function fetchParkingFacility(serviceKey, pageNo = 1, numOfRows = 1000) {
-  const url = appendKey(
-    `${BASE_TSAFETY}/PrkSttusInfo?pageNo=${pageNo}&numOfRows=${numOfRows}&format=2`,
-    serviceKey
-  );
-  const data = await fetchJson(url);
-  if (data.resultCode !== "0") throw new Error(data.resultMsg || "API error");
-  return data;
-}
-
-// 한국교통안전공단 주차장 실시간 정보
-async function fetchParkingRealtime(serviceKey, pageNo = 1, numOfRows = 1000) {
-  const url = appendKey(
-    `${BASE_TSAFETY}/PrkRealtimeInfo?pageNo=${pageNo}&numOfRows=${numOfRows}&format=2`,
-    serviceKey
-  );
-  const data = await fetchJson(url);
-  if (data.resultCode !== "0") throw new Error(data.resultMsg || "API error");
-  return data;
-}
-
-// 한국교통안전공단 주차장 운영 정보
-async function fetchParkingOperation(serviceKey, pageNo = 1, numOfRows = 1000) {
-  const url = appendKey(
-    `${BASE_TSAFETY}/PrkOprInfo?pageNo=${pageNo}&numOfRows=${numOfRows}&format=2`,
-    serviceKey
-  );
-  const data = await fetchJson(url);
-  if (data.resultCode !== "0") throw new Error(data.resultMsg || "API error");
-  return data;
-}
-
-// 강릉시 주차장 정보
 async function fetchGangneungParking(serviceKey, endpoint, pageNo = 1) {
   const url = appendKey(
     `${BASE_GANGNEUNG}/${endpoint}?pageNo=${pageNo}&numOfRows=100`,
-    serviceKey
+    serviceKey,
   );
   const data = await fetchJson(url);
   const code = data?.header?.resultCode;
@@ -75,14 +40,13 @@ async function fetchGangneungParking(serviceKey, endpoint, pageNo = 1) {
   return data;
 }
 
-// 기상청 단기예보 (격자 좌표 필요)
 async function fetchWeatherForecast(serviceKey, nx, ny) {
   const now = new Date();
   const baseDate = formatKstDate(now);
   const baseTime = getBaseTime(now);
   const url = appendKey(
     `${BASE_WEATHER}/getVilageFcst?pageNo=1&numOfRows=60&dataType=JSON&base_date=${baseDate}&base_time=${baseTime}&nx=${nx}&ny=${ny}`,
-    serviceKey
+    serviceKey,
   );
   const data = await fetchJson(url);
   const code = data?.response?.header?.resultCode;
@@ -90,37 +54,44 @@ async function fetchWeatherForecast(serviceKey, nx, ny) {
   return data;
 }
 
-// 한국관광공사 강원도 관광지 정보
 async function fetchGangwonTourism(serviceKey, keyword = "", pageNo = 1, numOfRows = 20) {
-  const areaCode = "32"; // 강원특별자치도
-  let url;
+  const areaCode = "32";
+  const path = keyword ? "searchKeyword1" : "areaBasedList1";
+  const target = new URL(`${BASE_TOURISM}/${path}`);
+  target.searchParams.set("numOfRows", String(numOfRows));
+  target.searchParams.set("pageNo", String(pageNo));
+  target.searchParams.set("MobileOS", "ETC");
+  target.searchParams.set("MobileApp", "GangwonParkingMate");
+  target.searchParams.set("_type", "json");
+  target.searchParams.set("areaCode", areaCode);
   if (keyword) {
-    url = `${BASE_TOURISM}/searchKeyword1?numOfRows=${numOfRows}&pageNo=${pageNo}&MobileOS=ETC&MobileApp=GangwonParkingMate&_type=json&keyword=${encodeURIComponent(keyword)}&areaCode=${areaCode}`;
+    target.searchParams.set("keyword", keyword);
   } else {
-    url = `${BASE_TOURISM}/areaBasedList1?numOfRows=${numOfRows}&pageNo=${pageNo}&MobileOS=ETC&MobileApp=GangwonParkingMate&_type=json&areaCode=${areaCode}&contentTypeId=12`;
+    target.searchParams.set("contentTypeId", "12");
   }
-  const data = await fetchJson(appendKey(url, serviceKey));
+  const data = await fetchJson(appendKey(target.toString(), serviceKey));
   const code = data?.response?.header?.resultCode;
   if (code && code !== "0000") throw new Error(data?.response?.header?.resultMsg || "Tourism API error");
   return data;
 }
 
-// 한국관광공사 강원도 행사/축제
 async function fetchGangwonEvents(serviceKey, pageNo = 1) {
   const now = new Date();
   const eventStartDate = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}01`;
-  const areaCode = "32";
-  const url = appendKey(
-    `${BASE_TOURISM}/searchFestival1?numOfRows=50&pageNo=${pageNo}&MobileOS=ETC&MobileApp=GangwonParkingMate&_type=json&areaCode=${areaCode}&eventStartDate=${eventStartDate}`,
-    serviceKey
-  );
-  const data = await fetchJson(url);
+  const target = new URL(`${BASE_TOURISM}/searchFestival1`);
+  target.searchParams.set("numOfRows", "50");
+  target.searchParams.set("pageNo", String(pageNo));
+  target.searchParams.set("MobileOS", "ETC");
+  target.searchParams.set("MobileApp", "GangwonParkingMate");
+  target.searchParams.set("_type", "json");
+  target.searchParams.set("areaCode", "32");
+  target.searchParams.set("eventStartDate", eventStartDate);
+  const data = await fetchJson(appendKey(target.toString(), serviceKey));
   const code = data?.response?.header?.resultCode;
   if (code && code !== "0000") throw new Error(data?.response?.header?.resultMsg || "Events API error");
   return data;
 }
 
-// Kakao Local API - 키워드로 장소 검색
 async function searchKakaoPlace(kakaoRestKey, keyword, x = null, y = null) {
   let url = `${BASE_KAKAO}/v2/local/search/keyword.json?query=${encodeURIComponent(keyword)}&size=15`;
   if (x && y) url += `&x=${x}&y=${y}&radius=20000&sort=distance`;
@@ -131,7 +102,6 @@ async function searchKakaoPlace(kakaoRestKey, keyword, x = null, y = null) {
   return data;
 }
 
-// Kakao Local API - 좌표 근처 주차장 검색
 async function searchKakaoParkingNearby(kakaoRestKey, x, y, radius = 1000) {
   const url = `${BASE_KAKAO}/v2/local/search/category.json?category_group_code=PK6&x=${x}&y=${y}&radius=${radius}&sort=distance&size=15`;
   const data = await fetchJson(url, {
@@ -141,7 +111,6 @@ async function searchKakaoParkingNearby(kakaoRestKey, x, y, radius = 1000) {
   return data;
 }
 
-// WGS84 → 기상청 격자 좌표 변환
 function latLngToGrid(lat, lng) {
   const RE = 6371.00877;
   const GRID = 5.0;
@@ -197,9 +166,6 @@ function getBaseTime(date) {
 }
 
 module.exports = {
-  fetchParkingFacility,
-  fetchParkingRealtime,
-  fetchParkingOperation,
   fetchGangneungParking,
   fetchWeatherForecast,
   fetchGangwonTourism,
