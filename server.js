@@ -9,6 +9,7 @@ loadEnvFile(path.join(__dirname, "backend", ".env"));
 const PORT = Number(process.env.PORT || 8080);
 const ROOT = __dirname;
 const GANGNEUNG_API_ROOT = "https://apis.data.go.kr/4201000/GNitsTrafficInfoService_1.0";
+const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 const FETCH_TIMEOUT_MS = 30000;
 const RETRY_COUNT = 2;
 const REALTIME_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
@@ -426,7 +427,160 @@ function proxyClientConfig(res) {
   sendJson(res, 200, {
     kakaoJavascriptKey: cleanSecret(process.env.KAKAO_JAVASCRIPT_KEY),
     hasDataServiceKey: Boolean(cleanSecret(process.env.DATA_GO_KR_SERVICE_KEY)),
+    hasGeminiKey: Boolean(cleanSecret(process.env.GEMINI_API_KEY)),
   });
+}
+
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    req.on("data", (chunk) => {
+      body += chunk;
+      if (body.length > 65536) {
+        reject(new Error("Request body is too large."));
+        req.destroy();
+      }
+    });
+    req.on("end", () => {
+      if (!body.trim()) {
+        resolve({});
+        return;
+      }
+      try {
+        resolve(JSON.parse(body));
+      } catch {
+        reject(new Error("Invalid JSON body."));
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
+function normalizePreference(value) {
+  if (value === "near" || value === "comfort" || value === "balanced") return value;
+  return "balanced";
+}
+
+function fallbackParkingIntent(text) {
+  const original = String(text || "").trim();
+  const compact = original.replace(/\s+/g, " ");
+  let preference = "balanced";
+  if (/쾌적|여유|한산|널널|자리|혼잡하지|안\s*붐비|멀어도/.test(compact)) {
+    preference = "comfort";
+  } else if (/가까|근처|인근|도보|최단|가장\s*가까/.test(compact)) {
+    preference = "near";
+  }
+
+  let destination = compact
+    .replace(/(에서|근처에서)\s*(가까운|가까이|근처|인근).*$/g, "")
+    .replace(/(으로|로)\s*(갈|가).*$/g, "")
+    .replace(/주차장|찾아줘|찾아|추천해줘|추천|가까운|가까이|근처|인근|쾌적한|쾌적|여유로운|여유|한산한|한산|멀어도|되니깐|되니까|괜찮으니까/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  destination = destination.replace(/(에서|으로|로|에)$/g, "").trim();
+
+  return {
+    destination: destination || original,
+    preference,
+    reason: "AI 분석을 사용할 수 없어 입력 문장을 기본 해석으로 처리했습니다.",
+    usedAi: false,
+  };
+}
+
+function parseGeminiJson(text) {
+  const raw = String(text || "")
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/```$/i, "")
+    .trim();
+  try {
+    return JSON.parse(raw);
+  } catch {
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error("AI response did not contain JSON.");
+    return JSON.parse(match[0]);
+  }
+}
+
+function normalizeParkingIntent(payload, originalText, usedAi) {
+  const fallback = fallbackParkingIntent(originalText);
+  const destination = String(payload?.destination || fallback.destination || originalText).trim();
+  const reason = String(payload?.reason || fallback.reason || "").trim();
+  return {
+    destination: destination || originalText,
+    preference: normalizePreference(payload?.preference || fallback.preference),
+    reason,
+    usedAi,
+  };
+}
+
+async function analyzeParkingIntent(text) {
+  const apiKey = cleanSecret(process.env.GEMINI_API_KEY);
+  if (!apiKey) return fallbackParkingIntent(text);
+
+  const prompt = [
+    "너는 강원 Parking Mate의 주차 추천 의도 분석기다.",
+    "사용자 문장에서 목적지와 주차 선호를 추출해라.",
+    "preference는 다음 중 하나만 사용한다: near, comfort, balanced.",
+    "- near: 가까움, 도보, 최단거리, 근처를 강하게 원함",
+    "- comfort: 멀어도 됨, 여유, 쾌적, 혼잡 회피, 자리 많음을 원함",
+    "- balanced: 명확한 선호가 없거나 둘 다 균형",
+    "반드시 JSON만 반환해라. 예: {\"destination\":\"레고랜드\",\"preference\":\"comfort\",\"reason\":\"멀어도 쾌적한 주차장을 원한다고 해석했습니다.\"}",
+    `사용자 입력: ${text}`,
+  ].join("\n");
+
+  const response = await fetch(`${GEMINI_API_URL}?key=${encodeURIComponent(apiKey)}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: prompt }],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.2,
+        maxOutputTokens: 180,
+        responseMimeType: "application/json",
+      },
+    }),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = payload?.error?.message || `Gemini HTTP ${response.status}`;
+    throw new Error(message);
+  }
+
+  const outputText = payload?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  const parsed = parseGeminiJson(outputText);
+  return normalizeParkingIntent(parsed, text, true);
+}
+
+async function proxyParkingIntent(req, res) {
+  if (req.method !== "POST") {
+    sendJson(res, 405, { message: "POST method is required." });
+    return;
+  }
+  let text = "";
+  try {
+    const body = await readJsonBody(req);
+    text = String(body?.text || "").trim();
+    if (!text) {
+      sendJson(res, 400, { message: "text is required." });
+      return;
+    }
+    const result = await analyzeParkingIntent(text);
+    sendJson(res, 200, result);
+  } catch (error) {
+    const fallback = fallbackParkingIntent(text);
+    sendJson(res, 200, {
+      ...fallback,
+      reason: `AI 분석이 실패했습니다. ${error.message}`,
+      usedAi: false,
+    });
+  }
 }
 
 function requestHandler(req, res) {
@@ -434,6 +588,11 @@ function requestHandler(req, res) {
 
   if (reqUrl.pathname === "/api/config") {
     proxyClientConfig(res);
+    return;
+  }
+
+  if (reqUrl.pathname === "/api/ai/parking-intent") {
+    proxyParkingIntent(req, res);
     return;
   }
 

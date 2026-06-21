@@ -277,9 +277,9 @@ GEMINI_API_KEY=여기에_키_입력
 키 없음 → fallback → "○○주차장은 여유롭고 현재 7면 여유가 있어 도보 4분 거리입니다."
 ```
 
-현재 코드는 `gemini-1.5-flash` 모델 사용 중. 더 최신 무료 모델로 바꾸려면 `services/gemini.js` 1번째 줄에서 모델명만 교체하면 됩니다.
+현재 코드는 `gemini-2.5-flash` 모델을 사용합니다. 모델을 바꾸려면 `services/gemini.js`의 `GEMINI_API_URL` 모델명만 교체하면 됩니다.
 
-> AI Studio에서 현재 무료 제공 모델 목록을 확인 후 사용하세요. (2025년 8월 기준: gemini-1.5-flash 무료)
+> AI Studio에서 현재 계정에 제공되는 모델 목록을 확인한 뒤 사용하세요.
 
 ---
 
