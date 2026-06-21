@@ -1,7 +1,7 @@
 const fetch = require("node-fetch");
 
 const GEMINI_API_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
 const SYSTEM_PROMPT = `너는 강원도 관광객을 위한 친절한 주차 안내 AI '강원 Parking Mate'야.
 아래의 주차장 데이터를 바탕으로, 왜 이 주차장을 추천하는지 2문장 이내의 진솔한 이유를 작성해줘.
