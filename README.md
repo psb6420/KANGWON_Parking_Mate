@@ -93,10 +93,10 @@ DB_PATH=
 | Method | Path | 설명 |
 |---|---|---|
 | `GET` | `/api/config` | 프론트엔드에서 필요한 설정 조회 |
-| `GET` | `/api/parking/gangwon-realtime` | 강원권 실시간 주차 정보 조회 |
-| `GET` | `/api/parking/chuncheon-realtime` | 춘천 실시간 주차 정보 조회 |
-| `GET` | `/api/parking/all` | 통합 주차 정보 조회 |
-| `GET` | `/api/parking/realtime-refresh` | 실시간 주차 정보 갱신 |
+| `GET` | `/api/parking/gangwon-realtime` | 강릉시 `getParkInfo` + `getParkRltm` 기반 주차 정보 조회 |
+| `GET` | `/api/parking/chuncheon-realtime` | 호환용 별칭. 내부 데이터 소스는 강릉시 API |
+| `GET` | `/api/parking/all` | 호환용 별칭. 내부 데이터 소스는 강릉시 API |
+| `GET` | `/api/parking/realtime-refresh` | 강릉시 실시간 주차 정보 갱신 |
 
 ### 백엔드 서버
 
@@ -107,7 +107,7 @@ DB_PATH=
 | `POST` | `/api/recommend` | 목적지 기준 주차장 추천 |
 | `GET` | `/api/parking/lots` | 주차장 목록 조회 |
 | `GET` | `/api/parking/realtime` | 주차장 실시간 현황 조회 |
-| `POST` | `/api/parking/sync` | 공공데이터 주차장 정보 동기화 |
+| `POST` | `/api/parking/sync` | 강릉시 주차장 정보와 실시간 현황 동기화 |
 | `POST` | `/api/parking/status` | Arduino 주차면 상태 수신 |
 | `GET` | `/api/parking/status/live` | 실시간 주차면 상태 SSE |
 | `POST` | `/api/arduino/lots` | Arduino 주차장 등록 |
