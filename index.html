@@ -319,6 +319,36 @@
         box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.85);
       }
 
+      .slot-cell.recommended {
+        outline: 3px solid #1769e0;
+        outline-offset: -3px;
+      }
+
+      .slot-recommend-badge {
+        display: inline-block;
+        margin-top: 3px;
+        padding: 1px 6px;
+        border-radius: 999px;
+        background: #fff;
+        color: #1769e0;
+        font-size: 9px;
+        font-weight: 900;
+        letter-spacing: 0.3px;
+      }
+
+      .slot-recommend-notice {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px 10px;
+        border-radius: 6px;
+        background: #eef4ff;
+        border: 1px solid rgba(23, 105, 224, 0.2);
+        color: #1769e0;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
       .control-panel,
       .summary,
       .api-responses {
@@ -518,6 +548,16 @@
         border-radius: 8px;
         background: #fff;
         box-shadow: 0 1px 0 rgba(20, 32, 51, 0.04);
+      }
+
+      .result-reason {
+        margin: 4px 0 0;
+        padding: 7px 9px;
+        border-radius: 6px;
+        background: var(--panel-soft);
+        color: var(--ink);
+        font-size: 12px;
+        line-height: 1.6;
       }
 
       .result-item:hover {
@@ -988,6 +1028,17 @@
         }
 
         allParkingRows = decorateArduinoRows(allParkingRows);
+
+        // Update the result card's available/total counts in the sidebar list
+        const updatedRow = allParkingRows.find((r) => r.arduinoLotId === lotId);
+        if (updatedRow?.managementNo) {
+          const card = document.querySelector(`.result-item[data-management-no="${updatedRow.managementNo}"]`);
+          const slotSpan = card?.querySelector("[data-slot-display]");
+          if (slotSpan) {
+            slotSpan.textContent = `여유 ${updatedRow.realtimeAvailable || "-"} / 총 ${updatedRow.realtimeTotal || updatedRow.total || "-"}면 ${formatItemDelta(updatedRow)}`;
+          }
+        }
+
         if (activeParkingItem?.arduinoLotId === lotId) {
           activeParkingItem = decorateArduinoItem(activeParkingItem);
           renderParkingPanel(activeParkingItem);
@@ -1108,12 +1159,20 @@
           searchFeedbackEl.textContent = `"${parsed.destination}" 목적지를 찾는 중입니다.`;
           const destination = await searchDestinationPlace(parsed.destination);
           const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference);
-          const top3 = ranked.slice(0, 3);
-          await renderParkingRows(top3);
+          const within1500 = ranked.filter(
+            (lot) => Number.isFinite(lot.destinationDistanceM) && lot.destinationDistanceM <= 1500,
+          );
+          if (!within1500.length) {
+            searchFeedbackEl.textContent = `${destination.name} 1.5km 이내에 주차장 정보가 없습니다.`;
+            return;
+          }
+          const top3 = within1500.slice(0, 3);
+          searchFeedbackEl.textContent = `${destination.name} 기준 추천 이유를 생성하는 중입니다.`;
+          const reasons = await fetchParkingReasons(destination.name, top3);
+          await renderParkingRows(top3, reasons);
           if (top3[0]) renderParkingPanel(top3[0]);
           setActiveView("home");
-          searchFeedbackEl.textContent =
-            `${destination.name} 기준 AI 추천: ${preferenceLabel(parsed.preference)}. ${parsed.reason}`;
+          searchFeedbackEl.textContent = `${destination.name} 기준 AI 추천: ${preferenceLabel(parsed.preference)}.`;
           setStatus(`AI가 ${destination.name} 주변 추천 주차장 상위 3개를 표시했습니다.`);
         } catch (error) {
           searchFeedbackEl.textContent = error.message;
@@ -1149,6 +1208,28 @@
           destinationInput.value = transcript.trim();
           applyDestinationSearch();
         };
+      }
+
+      async function fetchParkingReasons(destinationName, lots) {
+        try {
+          const response = await fetch("/api/ai/parking-reasons", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              destination: destinationName,
+              lots: lots.map((lot) => ({
+                name: lot.name,
+                realtimeAvailable: lot.realtimeAvailable,
+                realtimeTotal: lot.realtimeTotal || lot.total,
+                destinationDistanceM: lot.destinationDistanceM,
+              })),
+            }),
+          });
+          const payload = await response.json().catch(() => ({}));
+          return new Map((payload.reasons || []).map((r) => [r.index, r.reason]));
+        } catch {
+          return new Map();
+        }
       }
 
       let clientConfigLoadingPromise = null;
@@ -1482,7 +1563,7 @@
         );
       }
 
-      async function renderParkingRows(rows) {
+      async function renderParkingRows(rows, reasons = new Map()) {
         clearParkingMarkers();
         resultsEl.innerHTML = "";
         lastRenderedMarkerCount = rows.length;
@@ -1531,7 +1612,7 @@
 
         displayRows.slice(0, 100).forEach(({ item }, index) => {
           resultsEl.appendChild(
-            createResultButton(item, parkingMarkers[index]),
+            createResultButton(item, parkingMarkers[index], reasons.get(index)),
           );
         });
 
@@ -1659,10 +1740,11 @@
         });
       }
 
-      function createResultButton(item, marker) {
+      function createResultButton(item, marker, reason) {
         const button = document.createElement("button");
         button.type = "button";
         button.className = "result-item";
+        button.dataset.managementNo = item.managementNo || "";
         const operationText =
           item.operationSummary ||
           (item.hasOperationInfo ? "운영시간 미제공" : "운영정보 없음");
@@ -1673,12 +1755,13 @@
         const distanceText = formatDestinationDistance(item.destinationDistanceM);
         button.innerHTML = `
           <strong>${escapeHtml(item.name || "주차장")}</strong>
-          <span>여유 ${escapeHtml(item.realtimeAvailable || "-")} / 총 ${escapeHtml(item.realtimeTotal || item.total || "-")}면 ${escapeHtml(formatItemDelta(item))}</span>
+          <span data-slot-display>여유 ${escapeHtml(item.realtimeAvailable || "-")} / 총 ${escapeHtml(item.realtimeTotal || item.total || "-")}면 ${escapeHtml(formatItemDelta(item))}</span>
           ${distanceText ? `<span>목적지까지 ${escapeHtml(distanceText)} · AI 기준: ${escapeHtml(preferenceLabel(item.recommendationPreference))}</span>` : ""}
           <span>${escapeHtml(item.address || "주소 없음")}</span>
           <span>${escapeHtml(coordinateLabel(item.coordinateSource))} · ${escapeHtml(operationText)}</span>
           ${sourceRows}
           <span>${escapeHtml(chargeText)}</span>
+          ${reason ? `<p class="result-reason">${escapeHtml(reason)}</p>` : ""}
         `;
         button.addEventListener("click", () => {
           map.setCenter(marker.getPosition());
@@ -1713,25 +1796,52 @@
         infoWindow.open(map, marker);
       }
 
+      function findRecommendedSlot(slots) {
+        // 공학 3호관은 주차장 왼쪽(col=-1, row=1) 기준으로 거리 계산
+        const available = slots.filter((s) => !s.isOccupied);
+        if (!available.length) return null;
+        return available.reduce((best, slot) => {
+          const toPos = (s) => {
+            const idx = s.slotNo - 1;
+            return { row: Math.floor(idx / 4), col: idx % 4 };
+          };
+          const { row, col } = toPos(slot);
+          const { row: bRow, col: bCol } = toPos(best);
+          const dist = Math.sqrt((col + 1) ** 2 + (row - 1) ** 2);
+          const bestDist = Math.sqrt((bCol + 1) ** 2 + (bRow - 1) ** 2);
+          return dist < bestDist ? slot : best;
+        });
+      }
+
       function renderArduinoSlotBoard(item) {
         if (!item?.arduinoLotId) return "";
         const slots = item.arduinoSlots || defaultVirtualSlots();
+        const recommended = findRecommendedSlot(slots);
         const cells = slots
           .map((slot) => {
+            const isRecommended = !slot.isOccupied && recommended?.slotNo === slot.slotNo;
             const statusClass = slot.isOccupied ? "occupied" : "available";
             const statusText = slot.isOccupied ? "주차 중" : "비어 있음";
             const sensorText = slot.isSensorLinked ? "Arduino" : "가상";
             return `
-              <div class="slot-cell ${statusClass}${slot.isSensorLinked ? " sensor" : ""}" data-slot="${escapeHtml(slot.label)}">
+              <div class="slot-cell ${statusClass}${slot.isSensorLinked ? " sensor" : ""}${isRecommended ? " recommended" : ""}" data-slot="${escapeHtml(slot.label)}">
                 <div>
                   <strong>${escapeHtml(slot.label)}</strong>
                   <span>${escapeHtml(statusText)}</span>
                   <span>${escapeHtml(sensorText)}</span>
+                  ${isRecommended ? '<span class="slot-recommend-badge">추천</span>' : ""}
                 </div>
               </div>
             `;
           })
           .join("");
+
+        const recommendNotice = recommended
+          ? `<div class="slot-recommend-notice">
+               공학 3호관 최근접 추천: <strong>${escapeHtml(recommended.label)}</strong>
+               ${recommended.isSensorLinked ? "· Arduino 실시간 확인" : ""}
+             </div>`
+          : `<div class="slot-recommend-notice">현재 빈 자리가 없습니다.</div>`;
 
         return `
           <section class="slot-panel" aria-label="강원대학교 주차장6 주차면">
@@ -1745,6 +1855,7 @@
                 <span><i class="slot-dot occupied"></i>주차 중</span>
               </div>
             </div>
+            ${recommendNotice}
             <div class="slot-site-map" aria-label="주차장 주변 건물 배치">
               <div class="site-label left">공학 3호관</div>
               <div class="slot-board-wrap">

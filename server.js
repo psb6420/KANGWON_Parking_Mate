@@ -584,6 +584,7 @@ async function analyzeParkingIntent(text) {
     `사용자 입력: ${text}`,
   ].join("\n");
 
+
   const response = await fetch(`${GEMINI_API_URL}?key=${encodeURIComponent(apiKey)}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -651,6 +652,7 @@ function requestHandler(req, res) {
     return;
   }
 
+  
   if (
     reqUrl.pathname === "/api/parking/gangwon-realtime" ||
     reqUrl.pathname === "/api/parking/chuncheon-realtime" ||
