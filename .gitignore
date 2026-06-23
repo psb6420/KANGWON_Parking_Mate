@@ -1,0 +1,7 @@
+.vercel
+.env
+backend/.env
+backend/*.db
+backend/*.db-shm
+backend/*.db-wal
+backend/node_modules/
