@@ -1,145 +1,43 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from pydantic import BaseModel
-import json
 import sys
-import urllib.error
-import urllib.request
+import uvicorn
 
-
-# Windows PowerShell encoding error prevention
-try:
-    sys.stdout.reconfigure(encoding="utf-8")
-except Exception:
-    pass
-
+# 윈도우 터미널 한글 깨짐 방지
+sys.stdout.reconfigure(encoding='utf-8')
 
 app = FastAPI()
 
-EXPRESS_BACKEND_STATUS_URL = "http://localhost:3001/api/parking/status"
-TARGET_A1_PARKING_ID = "KNU_PARKING_6_A1"
-
-
+# ESP32로부터 받을 데이터 구조 (JSON) 정의
 class ParkingStatus(BaseModel):
     spotId: str
     status: str
 
+# 1. 브라우저 접속 테스트용 (서버가 잘 켜졌는지 확인)
+@app.get("/")
+def read_root():
+    return {"message": "파이썬 서버가 정상적으로 켜져 있습니다! (연결 성공)"}
 
-def status_to_occupied(status: str) -> bool:
-    normalized = str(status or "").strip().lower()
-    occupied_values = {
-        "occupied",
-        "occupy",
-        "full",
-        "car",
-        "detected",
-        "true",
-        "1",
-        "yes",
-        "on",
-        "차량 있음",
-        "차량있음",
-        "주차중",
-        "주차 중",
-    }
-    empty_values = {
-        "empty",
-        "free",
-        "available",
-        "vacant",
-        "clear",
-        "false",
-        "0",
-        "no",
-        "off",
-        "차량 없음",
-        "차량없음",
-        "비어있음",
-        "비어 있음",
-    }
-
-    if normalized in occupied_values:
-        return True
-    if normalized in empty_values:
-        return False
-
-    raise HTTPException(
-        status_code=400,
-        detail=(
-            "Unknown status. Use occupied/empty, true/false, 1/0, "
-            "차량 있음/차량 없음, or equivalent values."
-        ),
-    )
-
-
-def forward_to_a1(data: ParkingStatus, is_occupied: bool) -> dict:
-    payload = {
-        "parking_id": TARGET_A1_PARKING_ID,
-        "is_occupied": is_occupied,
-        "distance_cm": None,
-    }
-    body = json.dumps(payload).encode("utf-8")
-    request = urllib.request.Request(
-        EXPRESS_BACKEND_STATUS_URL,
-        data=body,
-        headers={"Content-Type": "application/json; charset=utf-8"},
-        method="POST",
-    )
-
-    try:
-        with urllib.request.urlopen(request, timeout=5) as response:
-            response_body = response.read().decode("utf-8")
-            return {
-                "ok": True,
-                "status_code": response.status,
-                "backend_response": json.loads(response_body),
-            }
-    except urllib.error.HTTPError as error:
-        error_body = error.read().decode("utf-8", errors="replace")
-        return {
-            "ok": False,
-            "status_code": error.code,
-            "backend_response": error_body,
-        }
-    except Exception as error:
-        return {
-            "ok": False,
-            "status_code": None,
-            "backend_response": str(error),
-        }
-
-
-@app.get("/health")
-def health():
-    return {"status": "ok", "target": EXPRESS_BACKEND_STATUS_URL}
-
-
+# 2. ESP32 데이터 수신용 엔드포인트
 @app.post("/api/parking/status")
 def update_parking_status(data: ParkingStatus):
-    is_occupied = status_to_occupied(data.status)
-    state_str = "차량 있음" if is_occupied else "차량 없음"
-    forwarded = forward_to_a1(data, is_occupied)
-
-    print("\n[Data Received]")
-    print(f" - Spot ID: {data.spotId}")
-    print(f" - Status: {data.status}")
-    print(f" - Parsed State: {state_str}")
-    print(f" - Connected Target: {TARGET_A1_PARKING_ID}")
-    print(f" - Forwarded: {'success' if forwarded['ok'] else 'failed'}")
+    # 서버 터미널 화면에 보기 좋게 출력
+    print(f"\n[데이터 수신 완료]")
+    print(f" - 주차 구역 ID: {data.spotId}")
+    
+    if data.status == "OCCUPIED":
+        print(f" - 주차 상태: 차량 있음 🚗 (OCCUPIED)")
+    else:
+        print(f" - 주차 상태: 차량 없음 텅~ (EMPTY)")
+        
     print("-" * 40)
+    
+    return {"message": "데이터를 성공적으로 받았습니다"}
 
-    if not forwarded["ok"]:
-        return {
-            "message": "Data received, but A1 forwarding failed",
-            "spotId": data.spotId,
-            "target_parking_id": TARGET_A1_PARKING_ID,
-            "is_occupied": is_occupied,
-            "forwarded": forwarded,
-        }
-
-    return {
-        "message": "Data received successfully and reflected on A1",
-        "spotId": data.spotId,
-        "target_parking_id": TARGET_A1_PARKING_ID,
-        "is_occupied": is_occupied,
-        "forwarded": forwarded,
-    }
+if __name__ == "__main__":
+    # 파이썬 파일을 직접 실행했을 때 서버가 켜지도록 설정합니다.
+    # host="0.0.0.0" 은 외부 기기(ESP32 등)의 접속을 허용한다는 뜻입니다.
+    print("=========================================")
+    print("  ESP32 주차 센서 수신 서버를 시작합니다...  ")
+    print("=========================================")
+    uvicorn.run("esp32_v1_sensor2:app", host="0.0.0.0", port=8000, reload=True)

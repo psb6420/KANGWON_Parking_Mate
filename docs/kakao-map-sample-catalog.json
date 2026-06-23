@@ -1,0 +1,151 @@
+{
+  "source": "https://apis.map.kakao.com/web/sample/",
+  "updatedAt": "2026-06-23",
+  "groups": [
+    {
+      "id": "map-basic",
+      "name": "지도 기본",
+      "description": "지도 생성, 이동, 레벨, 컨트롤, 지도 타입, 지도 영역 제어 기능",
+      "samples": [
+        {"name": "지도 생성하기", "url": "https://apis.map.kakao.com/web/sample/basicMap/", "projectUse": "지도 초기화 기본 구조"},
+        {"name": "지도 이동시키기", "url": "https://apis.map.kakao.com/web/sample/moveMap/", "projectUse": "목적지/주차장 선택 시 지도 중심 이동"},
+        {"name": "지도 레벨 바꾸기", "url": "https://apis.map.kakao.com/web/sample/changeLevel/", "projectUse": "추천 주차장 확대, 전체 보기 축소"},
+        {"name": "지도 정보 얻어오기", "url": "https://apis.map.kakao.com/web/sample/mapInfo/", "projectUse": "현재 중심좌표, 레벨, 영역 확인"},
+        {"name": "지도에 컨트롤 올리기", "url": "https://apis.map.kakao.com/web/sample/addMapControl/", "projectUse": "줌/지도타입 컨트롤"},
+        {"name": "지도에 사용자 컨트롤 올리기", "url": "https://apis.map.kakao.com/web/sample/addMapCustomControl/", "projectUse": "새로고침, 현재위치, 추천 버튼"},
+        {"name": "지도 이동 막기", "url": "https://apis.map.kakao.com/web/sample/disableMapDragMove/", "projectUse": "고정 지도 UI"},
+        {"name": "지도 확대 축소 막기", "url": "https://apis.map.kakao.com/web/sample/enableDisableZoomInOut/", "projectUse": "모바일 스크롤 충돌 방지"},
+        {"name": "지도에 교통정보 표시하기", "url": "https://apis.map.kakao.com/web/sample/addTrafficOverlay/", "projectUse": "교통 레이어 표시"},
+        {"name": "지도에 로드뷰 도로 표시하기", "url": "https://apis.map.kakao.com/web/sample/addRoadviewOverlay/", "projectUse": "로드뷰 가능 도로 표시"},
+        {"name": "지도에 지형도 표시하기", "url": "https://apis.map.kakao.com/web/sample/addTerrainOverlay/", "projectUse": "지형 정보 표시"},
+        {"name": "지도 타입 바꾸기1", "url": "https://apis.map.kakao.com/web/sample/changeOverlay1/", "projectUse": "버튼식 지도 타입 전환"},
+        {"name": "지도 타입 바꾸기2", "url": "https://apis.map.kakao.com/web/sample/changeOverlay2/", "projectUse": "토글식 레이어 전환"},
+        {"name": "지도 범위 재설정 하기", "url": "https://apis.map.kakao.com/web/sample/setBounds/", "projectUse": "여러 주차장 자동 맞춤"},
+        {"name": "지도 영역 크기 동적 변경하기", "url": "https://apis.map.kakao.com/web/sample/mapRelayout/", "projectUse": "반응형 레이아웃 후 relayout 처리"}
+      ]
+    },
+    {
+      "id": "map-events",
+      "name": "지도 이벤트",
+      "description": "지도 클릭, 이동, 확대/축소, 중심/영역 변경, 타일 로드 이벤트",
+      "samples": [
+        {"name": "클릭 이벤트 등록하기", "url": "https://apis.map.kakao.com/web/sample/addMapClickEvent/", "projectUse": "클릭 좌표 확인"},
+        {"name": "클릭한 위치에 마커 표시하기", "url": "https://apis.map.kakao.com/web/sample/addMapClickEventWithMarker/", "projectUse": "사용자 지정 목적지"},
+        {"name": "이동 이벤트 등록하기", "url": "https://apis.map.kakao.com/web/sample/addMapDragendEvent/", "projectUse": "지도 이동 후 주변 주차장 재검색"},
+        {"name": "확대, 축소 이벤트 등록하기", "url": "https://apis.map.kakao.com/web/sample/addMapZoomChangedEvent/", "projectUse": "레벨별 표시 전환"},
+        {"name": "중심좌표 변경 이벤트 등록하기", "url": "https://apis.map.kakao.com/web/sample/addMapCenterChangedEvent/", "projectUse": "중심 기준 주소 표시"},
+        {"name": "영역 변경 이벤트 등록하기", "url": "https://apis.map.kakao.com/web/sample/addMapBoundsChangedEvent/", "projectUse": "화면 영역 기준 필터"},
+        {"name": "타일로드 이벤트 등록하기", "url": "https://apis.map.kakao.com/web/sample/addTilesloadedEvent/", "projectUse": "지도 로딩 완료 처리"}
+      ]
+    },
+    {
+      "id": "markers-overlays",
+      "name": "마커와 오버레이",
+      "description": "주차장 위치 표시, 상세 정보, 커스텀 카드, 도형, 화면 밖 추적 기능",
+      "samples": [
+        {"name": "마커 생성하기", "url": "https://apis.map.kakao.com/web/sample/basicMarker/", "projectUse": "주차장 위치 표시"},
+        {"name": "드래그 가능한 마커 생성하기", "url": "https://apis.map.kakao.com/web/sample/draggableMarker/", "projectUse": "위치 조정 UI"},
+        {"name": "다른 이미지로 마커 생성하기", "url": "https://apis.map.kakao.com/web/sample/basicMarkerImage/", "projectUse": "혼잡도별 아이콘"},
+        {"name": "인포윈도우 생성하기", "url": "https://apis.map.kakao.com/web/sample/basicInfoWindow/", "projectUse": "간단 정보 표시"},
+        {"name": "마커에 인포윈도우 표시하기", "url": "https://apis.map.kakao.com/web/sample/markerWithInfoWindow/", "projectUse": "마커 클릭 정보 표시"},
+        {"name": "마커에 클릭 이벤트 등록하기", "url": "https://apis.map.kakao.com/web/sample/addMarkerClickEvent/", "projectUse": "상세 패널 열기"},
+        {"name": "마커에 마우스 이벤트 등록하기", "url": "https://apis.map.kakao.com/web/sample/addMarkerMouseEvent/", "projectUse": "hover 강조"},
+        {"name": "draggable 마커 이벤트 적용하기", "url": "https://apis.map.kakao.com/web/sample/addDraggableMarkerDragEvent/", "projectUse": "드래그 완료 좌표 저장"},
+        {"name": "geolocation으로 마커 표시하기", "url": "https://apis.map.kakao.com/web/sample/geolocationMarker/", "projectUse": "현재 위치 표시"},
+        {"name": "여러개 마커 표시하기", "url": "https://apis.map.kakao.com/web/sample/multipleMarkerImage/", "projectUse": "주차장 목록 표시"},
+        {"name": "여러개 마커 제어하기", "url": "https://apis.map.kakao.com/web/sample/multipleMarkerControl/", "projectUse": "필터별 마커 표시 제어"},
+        {"name": "여러개 마커에 이벤트 등록하기1", "url": "https://apis.map.kakao.com/web/sample/multipleMarkerEvent/", "projectUse": "마커별 이벤트"},
+        {"name": "여러개 마커에 이벤트 등록하기2", "url": "https://apis.map.kakao.com/web/sample/multipleMarkerEvent2/", "projectUse": "반복문 이벤트 처리"},
+        {"name": "다양한 이미지 마커 표시하기", "url": "https://apis.map.kakao.com/web/sample/categoryMarker/", "projectUse": "카테고리별 아이콘"},
+        {"name": "원, 선, 사각형, 다각형 표시하기", "url": "https://apis.map.kakao.com/web/sample/drawShape/", "projectUse": "반경/구역 표시"},
+        {"name": "선의 거리 계산하기", "url": "https://apis.map.kakao.com/web/sample/calculatePolylineDistance/", "projectUse": "거리 표시"},
+        {"name": "다각형의 면적 계산하기", "url": "https://apis.map.kakao.com/web/sample/calculatePolygonArea/", "projectUse": "구역 면적 계산"},
+        {"name": "다각형에 이벤트 등록하기1", "url": "https://apis.map.kakao.com/web/sample/addPolygonMouseEvent1/", "projectUse": "구역 hover/클릭"},
+        {"name": "다각형에 이벤트 등록하기2", "url": "https://apis.map.kakao.com/web/sample/addPolygonMouseEvent2/", "projectUse": "구역 정보 표시"},
+        {"name": "원의 반경 계산하기", "url": "https://apis.map.kakao.com/web/sample/calculateCircleRadius/", "projectUse": "사용자 지정 반경"},
+        {"name": "커스텀 오버레이 생성하기1", "url": "https://apis.map.kakao.com/web/sample/customOverlay1/", "projectUse": "HTML 라벨"},
+        {"name": "커스텀 오버레이 생성하기2", "url": "https://apis.map.kakao.com/web/sample/customOverlay2/", "projectUse": "주차장 카드형 말풍선"},
+        {"name": "닫기가 가능한 커스텀 오버레이", "url": "https://apis.map.kakao.com/web/sample/removableCustomOverlay/", "projectUse": "닫기 가능한 상세 카드"},
+        {"name": "이미지 마커와 커스텀 오버레이", "url": "https://apis.map.kakao.com/web/sample/markerWithCustomOverlay/", "projectUse": "아이콘+상세 카드"},
+        {"name": "커스텀오버레이를 드래그 하기", "url": "https://apis.map.kakao.com/web/sample/dragCustomOverlay/", "projectUse": "드래그 가능한 정보 UI"},
+        {"name": "지도 영역 밖의 마커위치 추적하기", "url": "https://apis.map.kakao.com/web/sample/markerTracker/", "projectUse": "화면 밖 선택 지점 방향 표시"},
+        {"name": "구멍난 다각형 만들기", "url": "https://apis.map.kakao.com/web/sample/donut/", "projectUse": "제외 구역이 있는 다각형"}
+      ]
+    },
+    {
+      "id": "roadview-static",
+      "name": "로드뷰와 정적지도",
+      "description": "로드뷰 연동, 로드뷰 오버레이, 이미지 지도 기능",
+      "samples": [
+        {"name": "로드뷰 생성하기", "url": "https://apis.map.kakao.com/web/sample/basicRoadview/", "projectUse": "주차장 주변 로드뷰"},
+        {"name": "로드뷰 도로를 이용하여 로드뷰 생성하기", "url": "https://apis.map.kakao.com/web/sample/basicRoadview2/", "projectUse": "로드뷰 가능 위치 선택"},
+        {"name": "동동이를 이용하여 로드뷰와 지도 연동하기", "url": "https://apis.map.kakao.com/web/sample/moveRoadview/", "projectUse": "로드뷰와 지도 동기화"},
+        {"name": "로드뷰에 마커와 인포윈도우 올리기", "url": "https://apis.map.kakao.com/web/sample/roadviewOverlay1/", "projectUse": "로드뷰 안 위치 표시"},
+        {"name": "마커의 고도와 반경 조절하기", "url": "https://apis.map.kakao.com/web/sample/roadviewOverlay2/", "projectUse": "로드뷰 마커 위치 보정"},
+        {"name": "로드뷰에 커스텀오버레이 올리기", "url": "https://apis.map.kakao.com/web/sample/roadviewCustomOverlay/", "projectUse": "로드뷰 카드/라벨"},
+        {"name": "로드뷰에 이미지 올리기", "url": "https://apis.map.kakao.com/web/sample/roadviewImageOverlay/", "projectUse": "현장 이미지 비교"},
+        {"name": "지도 위 버튼으로 로드뷰 표시하기", "url": "https://apis.map.kakao.com/web/sample/roadviewWithMapButton/", "projectUse": "로드뷰 모드 버튼"},
+        {"name": "로드뷰와 지도 토글하기", "url": "https://apis.map.kakao.com/web/sample/roadviewToggle/", "projectUse": "지도/로드뷰 전환"},
+        {"name": "이미지 지도 생성하기", "url": "https://apis.map.kakao.com/web/sample/staticMap/", "projectUse": "공유용 고정 지도"},
+        {"name": "이미지 지도에 마커 표시하기", "url": "https://apis.map.kakao.com/web/sample/staticMapWithMarker/", "projectUse": "안내용 위치 이미지"},
+        {"name": "마커와 텍스트 표시하기", "url": "https://apis.map.kakao.com/web/sample/staticMapWithMarkerText/", "projectUse": "주차장명 포함 이미지"}
+      ]
+    },
+    {
+      "id": "libraries",
+      "name": "라이브러리",
+      "description": "services, clusterer, drawing 라이브러리 기반 기능",
+      "samples": [
+        {"name": "키워드로 장소검색하기", "library": "services", "url": "https://apis.map.kakao.com/web/sample/keywordBasic/", "projectUse": "목적지 검색"},
+        {"name": "키워드로 장소검색하고 목록으로 표출하기", "library": "services", "url": "https://apis.map.kakao.com/web/sample/keywordList/", "projectUse": "검색 결과 리스트+지도"},
+        {"name": "카테고리로 장소 검색하기", "library": "services", "url": "https://apis.map.kakao.com/web/sample/categoryBasic/", "projectUse": "주변 POI 표시"},
+        {"name": "카테고리별 장소 검색하기", "library": "services", "url": "https://apis.map.kakao.com/web/sample/categoryFromBounds/", "projectUse": "현재 지도 영역 기준 장소 검색"},
+        {"name": "주소로 장소 표시하기", "library": "services", "url": "https://apis.map.kakao.com/web/sample/addr2coord/", "projectUse": "주소를 좌표로 변환"},
+        {"name": "좌표로 주소를 얻어내기", "library": "services", "url": "https://apis.map.kakao.com/web/sample/coord2addr/", "projectUse": "좌표를 주소로 변환"},
+        {"name": "WTM 좌표를 WGS84 좌표로 변환하기", "library": "services", "url": "https://apis.map.kakao.com/web/sample/transCoord/", "projectUse": "공공데이터 좌표계 변환"},
+        {"name": "마커 클러스터러 사용하기", "library": "clusterer", "url": "https://apis.map.kakao.com/web/sample/basicClusterer/", "projectUse": "많은 마커 묶기"},
+        {"name": "마커 클러스터러에 클릭이벤트 추가하기", "library": "clusterer", "url": "https://apis.map.kakao.com/web/sample/addClustererClickEvent/", "projectUse": "클러스터 클릭 시 확대"},
+        {"name": "클러스터 마커에 텍스트 표시하기", "library": "clusterer", "url": "https://apis.map.kakao.com/web/sample/chickenClusterer/", "projectUse": "클러스터 텍스트 커스터마이징"},
+        {"name": "Drawing Library 사용하기", "library": "drawing", "url": "https://apis.map.kakao.com/web/sample/basicDrawingLibrary/", "projectUse": "도형 그리기"},
+        {"name": "Drawing Library에서 데이터 얻기", "library": "drawing", "url": "https://apis.map.kakao.com/web/sample/drawingGetData/", "projectUse": "도형 데이터 저장"},
+        {"name": "Toolbox 사용하기", "library": "drawing", "url": "https://apis.map.kakao.com/web/sample/drawingToolbox/", "projectUse": "도형 도구 UI"},
+        {"name": "Drawing undo, redo", "library": "drawing", "url": "https://apis.map.kakao.com/web/sample/drawingUndo/", "projectUse": "도형 편집 취소/다시 실행"}
+      ]
+    },
+    {
+      "id": "custom-tiles",
+      "name": "커스텀 타일셋",
+      "description": "직접 만든 타일 이미지나 동적 타일을 지도 위에 표시하는 고급 기능",
+      "samples": [
+        {"name": "커스텀 타일셋1", "url": "https://apis.map.kakao.com/web/sample/customTileset/", "projectUse": "직접 만든 타일 이미지 표시"},
+        {"name": "커스텀 타일셋2", "url": "https://apis.map.kakao.com/web/sample/getTile/", "projectUse": "좌표/줌 기반 타일 동적 로딩"}
+      ]
+    }
+  ],
+  "recommendedOrderForThisProject": [
+    "multipleMarkerImage",
+    "multipleMarkerEvent",
+    "basicMarkerImage",
+    "customOverlay2",
+    "removableCustomOverlay",
+    "markerWithCustomOverlay",
+    "keywordList",
+    "addr2coord",
+    "coord2addr",
+    "setBounds",
+    "mapRelayout",
+    "addMapBoundsChangedEvent",
+    "basicClusterer",
+    "addClustererClickEvent",
+    "roadviewWithMapButton",
+    "roadviewToggle",
+    "drawingGetData",
+    "drawingToolbox"
+  ],
+  "libraryLoadExamples": {
+    "services": "//dapi.kakao.com/v2/maps/sdk.js?appkey=KAKAO_JAVASCRIPT_KEY&libraries=services",
+    "clusterer": "//dapi.kakao.com/v2/maps/sdk.js?appkey=KAKAO_JAVASCRIPT_KEY&libraries=clusterer",
+    "drawing": "//dapi.kakao.com/v2/maps/sdk.js?appkey=KAKAO_JAVASCRIPT_KEY&libraries=drawing",
+    "combined": "//dapi.kakao.com/v2/maps/sdk.js?appkey=KAKAO_JAVASCRIPT_KEY&libraries=services,clusterer,drawing"
+  }
+}
