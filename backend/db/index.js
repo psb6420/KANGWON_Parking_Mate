@@ -109,6 +109,36 @@ function initSchema(db) {
       fetched_at      TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
+  seedDefaultArduinoLots(db);
+}
+
+function seedDefaultArduinoLots(db) {
+  db.prepare(
+    `INSERT INTO arduino_parking_lots (lot_id, name, address, lat, lng, total_slots)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(lot_id) DO UPDATE SET
+       name = excluded.name,
+       address = excluded.address,
+       lat = excluded.lat,
+       lng = excluded.lng,
+       total_slots = excluded.total_slots`
+  ).run(
+    "KNU_PARKING_6",
+    "강원대학교 주차장6",
+    "강원특별자치도 춘천시 강원대학길 1",
+    37.8691389,
+    127.7405348,
+    12,
+  );
+
+  const insertSlot = db.prepare(
+    `INSERT INTO arduino_slots (lot_id, slot_no, is_occupied, sensor_value, updated_at)
+     VALUES (?, ?, 0, NULL, datetime('now'))
+     ON CONFLICT(lot_id, slot_no) DO NOTHING`
+  );
+  for (let slotNo = 1; slotNo <= 12; slotNo += 1) {
+    insertSlot.run("KNU_PARKING_6", slotNo);
+  }
 }
 
 module.exports = { getDb };

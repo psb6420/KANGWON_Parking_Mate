@@ -185,6 +185,140 @@
         min-height: 18px;
       }
 
+      .slot-panel {
+        display: grid;
+        gap: 10px;
+        margin-top: 12px;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #f8fafc;
+      }
+
+      .slot-panel-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .slot-panel-head strong {
+        display: block;
+        font-size: 13px;
+      }
+
+      .slot-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .slot-legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .slot-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 999px;
+      }
+
+      .slot-dot.available {
+        background: #19a463;
+      }
+
+      .slot-dot.occupied {
+        background: #d94141;
+      }
+
+      .slot-board {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 7px;
+      }
+
+      .slot-site-map {
+        display: grid;
+        grid-template-columns: minmax(84px, 0.65fr) minmax(0, 2.4fr) minmax(84px, 0.65fr);
+        grid-template-areas:
+          "left board right"
+          "bottom bottom bottom";
+        gap: 8px;
+        align-items: stretch;
+      }
+
+      .site-label {
+        display: grid;
+        min-height: 42px;
+        place-items: center;
+        border: 1px dashed #c9d4e5;
+        border-radius: 7px;
+        background: #fff;
+        color: #42526a;
+        font-size: 11px;
+        font-weight: 800;
+        line-height: 1.25;
+        text-align: center;
+      }
+
+      .site-label.left {
+        grid-area: left;
+      }
+
+      .site-label.right {
+        grid-area: right;
+      }
+
+      .site-label.bottom {
+        grid-area: bottom;
+        min-height: 34px;
+      }
+
+      .slot-board-wrap {
+        grid-area: board;
+        min-width: 0;
+      }
+
+      .slot-cell {
+        display: grid;
+        min-height: 58px;
+        place-items: center;
+        border: 1px solid transparent;
+        border-radius: 7px;
+        color: #fff;
+        font-size: 12px;
+        line-height: 1.25;
+        text-align: center;
+      }
+
+      .slot-cell strong {
+        display: block;
+        font-size: 14px;
+      }
+
+      .slot-cell span {
+        display: block;
+        font-size: 10px;
+      }
+
+      .slot-cell.available {
+        border-color: rgba(25, 164, 99, 0.36);
+        background: #19a463;
+      }
+
+      .slot-cell.occupied {
+        border-color: rgba(217, 65, 65, 0.36);
+        background: #d94141;
+      }
+
+      .slot-cell.sensor {
+        box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.85);
+      }
+
       .control-panel,
       .summary,
       .api-responses {
@@ -672,6 +806,9 @@
     <script>
       const DEFAULT_POSITION = { lat: 37.8228, lng: 128.1555 };
       const REALTIME_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+      const ARDUINO_BACKEND_ORIGIN = "http://localhost:3001";
+      const KNU_PARKING_LOT_ID = "KNU_PARKING_6";
+      const VIRTUAL_SLOT_COUNT = 12;
 
       let map;
       let infoWindow;
@@ -688,6 +825,9 @@
       let allParkingRows = [];
       let recognition = null;
       let isListening = false;
+      let activeParkingItem = null;
+      let arduinoStatusSource = null;
+      const arduinoSlotsByLot = new Map();
       let lastRealtimeChanges = new Map();
       let lastRealtimeChangeSummary = null;
       let kakaoSdkLoadingPromise = null;
@@ -768,6 +908,108 @@
         if (preference === "near") return "가까움 우선";
         if (preference === "comfort") return "쾌적함 우선";
         return "균형 추천";
+      }
+
+      function defaultVirtualSlots() {
+        return Array.from({ length: VIRTUAL_SLOT_COUNT }, (_, index) => ({
+          slotNo: index + 1,
+          label: `A${index + 1}`,
+          isOccupied: false,
+          isSensorLinked: index === 0,
+          updatedAt: null,
+        }));
+      }
+
+      function normalizeArduinoSlots(payload) {
+        const bySlot = new Map();
+        for (const slot of payload?.slots || []) {
+          const slotNo = Number(slot.slotNo ?? slot.slot_no);
+          if (!Number.isFinite(slotNo)) continue;
+          bySlot.set(slotNo, {
+            slotNo,
+            label: slot.slotLabel || `A${slotNo}`,
+            isOccupied: Boolean(slot.isOccupied ?? slot.is_occupied),
+            isSensorLinked: slotNo === 1,
+            sensorValue: slot.sensorValue ?? slot.sensor_value ?? slot.distance_cm ?? null,
+            updatedAt: slot.updatedAt ?? slot.updated_at ?? null,
+          });
+        }
+        return defaultVirtualSlots().map((slot) => bySlot.get(slot.slotNo) || slot);
+      }
+
+      function decorateArduinoItem(item) {
+        if (!item?.arduinoLotId) return item;
+        const slots = arduinoSlotsByLot.get(item.arduinoLotId) || defaultVirtualSlots();
+        const available = slots.filter((slot) => !slot.isOccupied).length;
+        return {
+          ...item,
+          arduinoSlots: slots,
+          realtimeAvailable: String(available),
+          realtimeTotal: String(slots.length),
+          total: String(slots.length),
+        };
+      }
+
+      function decorateArduinoRows(rows) {
+        return (rows || []).map((item) => decorateArduinoItem(item));
+      }
+
+      async function refreshArduinoLotState(lotId) {
+        try {
+          const response = await fetch(`${ARDUINO_BACKEND_ORIGIN}/api/arduino/slots/${encodeURIComponent(lotId)}`);
+          if (!response.ok) throw new Error(`Arduino backend ${response.status}`);
+          const payload = await response.json();
+          arduinoSlotsByLot.set(lotId, normalizeArduinoSlots(payload));
+        } catch {
+          if (!arduinoSlotsByLot.has(lotId)) arduinoSlotsByLot.set(lotId, defaultVirtualSlots());
+        }
+      }
+
+      function applyArduinoUpdate(data) {
+        const lotId = data?.lot_id;
+        if (!lotId) return;
+        if (data.type === "init") {
+          arduinoSlotsByLot.set(lotId, normalizeArduinoSlots(data));
+        } else if (data.type === "update") {
+          const slots = arduinoSlotsByLot.get(lotId) || defaultVirtualSlots();
+          const slotNo = Number(data.slot_no);
+          const nextSlots = slots.map((slot) =>
+            slot.slotNo === slotNo
+              ? {
+                  ...slot,
+                  label: data.slotLabel || slot.label,
+                  isOccupied: Boolean(data.is_occupied),
+                  sensorValue: data.distance_cm ?? null,
+                  updatedAt: data.updated_at ?? null,
+                }
+              : slot,
+          );
+          arduinoSlotsByLot.set(lotId, nextSlots);
+        }
+
+        allParkingRows = decorateArduinoRows(allParkingRows);
+        if (activeParkingItem?.arduinoLotId === lotId) {
+          activeParkingItem = decorateArduinoItem(activeParkingItem);
+          renderParkingPanel(activeParkingItem);
+        }
+      }
+
+      function startArduinoStatusStream() {
+        if (arduinoStatusSource) return;
+        try {
+          arduinoStatusSource = new EventSource(`${ARDUINO_BACKEND_ORIGIN}/api/parking/status/live`);
+          arduinoStatusSource.onmessage = (event) => {
+            try {
+              applyArduinoUpdate(JSON.parse(event.data));
+            } catch {}
+          };
+          arduinoStatusSource.onerror = () => {
+            arduinoStatusSource.close();
+            arduinoStatusSource = null;
+          };
+        } catch {
+          arduinoStatusSource = null;
+        }
       }
 
       function searchDestinationPlace(keyword) {
@@ -1001,8 +1243,10 @@
               payload.data?.length &&
               payload.data.length !== lastRenderedMarkerCount
             ) {
-              await renderParkingRows(payload.data);
-              rememberRealtimeRows(payload.data);
+              await refreshArduinoLotState(KNU_PARKING_LOT_ID);
+              const decoratedRows = decorateArduinoRows(payload.data);
+              await renderParkingRows(decoratedRows);
+              rememberRealtimeRows(decoratedRows);
             }
             renderSummary(payload);
             setStatus(
@@ -1012,9 +1256,12 @@
             payload = await requestParking(serviceKey, false);
           }
 
-          await renderParkingRows(payload.data || []);
-          allParkingRows = payload.data || [];
-          rememberRealtimeRows(payload.data || []);
+          await refreshArduinoLotState(KNU_PARKING_LOT_ID);
+          const finalRows = decorateArduinoRows(payload.data || []);
+          await renderParkingRows(finalRows);
+          allParkingRows = finalRows;
+          rememberRealtimeRows(finalRows);
+          startArduinoStatusStream();
           lastRealtimeChanges = new Map();
           lastRealtimeChangeSummary = null;
           renderSummary(payload);
@@ -1100,11 +1347,14 @@
             await wait(2500);
             payload = await requestParking(serviceKey, false);
           }
-          const changes = diffRealtimeRows(previousRows, payload.data || []);
+          await refreshArduinoLotState(KNU_PARKING_LOT_ID);
+          const refreshedRows = decorateArduinoRows(payload.data || []);
+          const changes = diffRealtimeRows(previousRows, refreshedRows);
           lastRealtimeChanges = changes.byId;
           lastRealtimeChangeSummary = changes.summary;
-          rememberRealtimeRows(payload.data || []);
-          await renderParkingRows(payload.data || []);
+          rememberRealtimeRows(refreshedRows);
+          allParkingRows = refreshedRows;
+          await renderParkingRows(refreshedRows);
           renderSummary(payload);
           nextRealtimeRefreshAt = new Date(
             Date.now() + REALTIME_REFRESH_INTERVAL_MS,
@@ -1443,21 +1693,67 @@
       }
 
       function showParkingInfo(marker, item) {
+        const decoratedItem = decorateArduinoItem(item);
         const operationRows = formatOperationRows(item);
         const sourceRows = formatSourceRows(item, true);
-        renderParkingPanel(item);
+        activeParkingItem = decoratedItem;
+        renderParkingPanel(decoratedItem);
         infoWindow.setContent(`
           <div style="padding:12px 14px;min-width:280px;font-size:13px;line-height:1.55">
-            <strong>${escapeHtml(item.name || "주차장")}</strong><br>
-            <span>관리번호: ${escapeHtml(item.managementNo || "-")}</span><br>
-            <span>여유 ${escapeHtml(item.realtimeAvailable || "-")} / 총 ${escapeHtml(item.realtimeTotal || item.total || "-")}면 ${escapeHtml(formatItemDelta(item))}</span><br>
+            <strong>${escapeHtml(decoratedItem.name || "주차장")}</strong><br>
+            <span>관리번호: ${escapeHtml(decoratedItem.managementNo || "-")}</span><br>
+            <span>여유 ${escapeHtml(decoratedItem.realtimeAvailable || "-")} / 총 ${escapeHtml(decoratedItem.realtimeTotal || decoratedItem.total || "-")}면 ${escapeHtml(formatItemDelta(decoratedItem))}</span><br>
             ${sourceRows}
-            <span>${escapeHtml(coordinateLabel(item.coordinateSource))}</span><br>
+            <span>${escapeHtml(coordinateLabel(decoratedItem.coordinateSource))}</span><br>
             ${operationRows}
-            <span>${escapeHtml(item.address || "")}</span>
+            <span>${escapeHtml(decoratedItem.address || "")}</span>
           </div>
         `);
         infoWindow.open(map, marker);
+      }
+
+      function renderArduinoSlotBoard(item) {
+        if (!item?.arduinoLotId) return "";
+        const slots = item.arduinoSlots || defaultVirtualSlots();
+        const cells = slots
+          .map((slot) => {
+            const statusClass = slot.isOccupied ? "occupied" : "available";
+            const statusText = slot.isOccupied ? "주차 중" : "비어 있음";
+            const sensorText = slot.isSensorLinked ? "Arduino" : "가상";
+            return `
+              <div class="slot-cell ${statusClass}${slot.isSensorLinked ? " sensor" : ""}" data-slot="${escapeHtml(slot.label)}">
+                <div>
+                  <strong>${escapeHtml(slot.label)}</strong>
+                  <span>${escapeHtml(statusText)}</span>
+                  <span>${escapeHtml(sensorText)}</span>
+                </div>
+              </div>
+            `;
+          })
+          .join("");
+
+        return `
+          <section class="slot-panel" aria-label="강원대학교 주차장6 주차면">
+            <div class="slot-panel-head">
+              <div>
+                <strong>4 x 3 주차면</strong>
+                <span class="panel-meta">A1-A12, A1은 Arduino 센서와 연결</span>
+              </div>
+              <div class="slot-legend" aria-label="주차면 상태 범례">
+                <span><i class="slot-dot available"></i>비어 있음</span>
+                <span><i class="slot-dot occupied"></i>주차 중</span>
+              </div>
+            </div>
+            <div class="slot-site-map" aria-label="주차장 주변 건물 배치">
+              <div class="site-label left">공학 3호관</div>
+              <div class="slot-board-wrap">
+                <div class="slot-board">${cells}</div>
+              </div>
+              <div class="site-label right">60주년 기념관</div>
+              <div class="site-label bottom">백록관</div>
+            </div>
+          </section>
+        `;
       }
 
       function renderParkingPanel(item) {
@@ -1492,6 +1788,7 @@
           <p class="panel-meta">${escapeHtml(operationText)}</p>
           <p class="panel-meta">${escapeHtml(chargeText)}</p>
           <p class="panel-meta">${escapeHtml(coordinateLabel(item.coordinateSource))}</p>
+          ${renderArduinoSlotBoard(item)}
         `;
       }
 
@@ -1550,6 +1847,7 @@
       }
 
       function coordinateLabel(source) {
+        if (source === "virtual-arduino") return "가상 Arduino 좌표";
         if (source === "address-spread") return "주소 좌표 변환 · 겹침 분산";
         if (source === "api-spread") return "API 좌표 · 겹침 분산";
         if (source === "address") return "주소 좌표 변환";

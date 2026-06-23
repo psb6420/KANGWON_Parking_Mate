@@ -13,6 +13,14 @@ const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/
 const FETCH_TIMEOUT_MS = 30000;
 const RETRY_COUNT = 2;
 const REALTIME_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const KNU_PARKING_LOT_6 = {
+  id: "KNU_PARKING_6",
+  name: "강원대학교 주차장6",
+  address: "강원특별자치도 춘천시 강원대학길 1",
+  lat: 37.8691389,
+  lng: 127.7405348,
+  totalSlots: 12,
+};
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -325,7 +333,54 @@ function buildMarkerRows(infoRows, realtimeRows, realtimeChangeById = new Map())
       hasOperationInfo: Boolean(operationSummary),
     });
   }
+  rows.push(createKnuParkingLot6Row(realtimeChangeById.get(KNU_PARKING_LOT_6.id) || null));
   return rows;
+}
+
+function createKnuParkingLot6Row(realtimeChange = null) {
+  const total = String(KNU_PARKING_LOT_6.totalSlots);
+  return {
+    managementNo: KNU_PARKING_LOT_6.id,
+    name: KNU_PARKING_LOT_6.name,
+    address: KNU_PARKING_LOT_6.address,
+    lat: KNU_PARKING_LOT_6.lat,
+    lng: KNU_PARKING_LOT_6.lng,
+    needsGeocode: false,
+    coordinateSource: "virtual-arduino",
+    total,
+    realtimeTotal: total,
+    realtimeAvailable: total,
+    realtimeChange,
+    isVirtualArduinoLot: true,
+    arduinoLotId: KNU_PARKING_LOT_6.id,
+    slotLayout: {
+      columns: 4,
+      rows: 3,
+      totalSlots: KNU_PARKING_LOT_6.totalSlots,
+      arduinoSlot: "A1",
+    },
+    sourceEntries: [
+      {
+        apiSource: "ARDUINO",
+        sourceApi: "virtual slots + Arduino A1",
+        sourceId: KNU_PARKING_LOT_6.id,
+        name: KNU_PARKING_LOT_6.name,
+        address: KNU_PARKING_LOT_6.address,
+        available: total,
+        total,
+        realtimeChange,
+        raw: {
+          slotLayout: "A1-A12 / 4x3",
+          arduinoSlot: "A1",
+        },
+      },
+    ],
+    sourceLabels: ["ARDUINO"],
+    operationSummary: "가상 주차면 A1-A12 / A1 Arduino 센서 연동",
+    chargeSummary: "프로토타입 가상 주차장입니다.",
+    operationDetails: ["가상 주차면 12면 중 A1은 Arduino 센서 상태와 연결됩니다."],
+    hasOperationInfo: true,
+  };
 }
 
 async function loadParkingData(serviceKey, previousCache = null) {
