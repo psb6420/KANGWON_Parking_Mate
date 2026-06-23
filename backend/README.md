@@ -179,6 +179,45 @@ es.onmessage = (e) => {
 
 ---
 
+### ESP32 FastAPI 브릿지와 A1 DB 저장
+
+강원대학교 주차장6 데모에서는 ESP32가 Express 백엔드로 직접 전송하지 않고, 로컬 FastAPI 브릿지(`fastapi_parking_bridge.py`)로 전송할 수 있습니다. 브릿지는 ESP32의 `spotId/status` 값을 받아 항상 `KNU_PARKING_6_A1` 주차면으로 매핑한 뒤 `POST /api/parking/status`에 전달합니다.
+
+```bash
+python -m uvicorn fastapi_parking_bridge:app --reload --host 0.0.0.0 --port 8000
+```
+
+ESP32 요청:
+
+```json
+{
+  "spotId": "A1",
+  "status": "OCCUPIED"
+}
+```
+
+처리 흐름:
+
+```text
+ESP32
+  -> FastAPI bridge (:8000)
+  -> POST /api/parking/status (:3001)
+  -> SQLite arduino_slots 저장
+  -> SSE + 웹 1초 폴링
+  -> 강원대학교 주차장6 A1 색상 갱신
+```
+
+상태 매핑:
+
+| ESP32 status | 백엔드 저장값 | 화면 표시 |
+|---|---:|---|
+| `OCCUPIED` | `is_occupied=true` | A1 빨간색, `꽉 차 있음` |
+| `EMPTY` | `is_occupied=false` | A1 초록색, `비어 있음` |
+
+로컬 테스트에서는 ESP32와 PC가 같은 Wi-Fi에 있어야 하며, ESP32는 `http://PC_IP:8000/api/parking/status`로 전송합니다.
+
+---
+
 ### 관광지 검색
 
 ```

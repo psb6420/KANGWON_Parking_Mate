@@ -846,9 +846,13 @@
     <script>
       const DEFAULT_POSITION = { lat: 37.8228, lng: 128.1555 };
       const REALTIME_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
-      const ARDUINO_BACKEND_ORIGIN = "http://localhost:3001";
+      const ARDUINO_BACKEND_ORIGIN =
+        window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+          ? "http://localhost:3001"
+          : `http://${window.location.hostname}:3001`;
       const KNU_PARKING_LOT_ID = "KNU_PARKING_6";
       const VIRTUAL_SLOT_COUNT = 12;
+      const ARDUINO_POLL_INTERVAL_MS = 1000;
 
       let map;
       let infoWindow;
@@ -867,6 +871,7 @@
       let isListening = false;
       let activeParkingItem = null;
       let arduinoStatusSource = null;
+      let arduinoPollTimer = null;
       const arduinoSlotsByLot = new Map();
       let lastRealtimeChanges = new Map();
       let lastRealtimeChangeSummary = null;
@@ -1061,6 +1066,19 @@
         } catch {
           arduinoStatusSource = null;
         }
+      }
+
+      function startArduinoStatusPolling() {
+        if (arduinoPollTimer) return;
+        // Keep A1 in sync with the DB even if the SSE connection reconnects.
+        arduinoPollTimer = window.setInterval(async () => {
+          await refreshArduinoLotState(KNU_PARKING_LOT_ID);
+          allParkingRows = decorateArduinoRows(allParkingRows);
+          if (activeParkingItem?.arduinoLotId === KNU_PARKING_LOT_ID) {
+            activeParkingItem = decorateArduinoItem(activeParkingItem);
+            renderParkingPanel(activeParkingItem);
+          }
+        }, ARDUINO_POLL_INTERVAL_MS);
       }
 
       function searchDestinationPlace(keyword) {
@@ -1344,6 +1362,7 @@
           allParkingRows = finalRows;
           rememberRealtimeRows(finalRows);
           startArduinoStatusStream();
+          startArduinoStatusPolling();
           lastRealtimeChanges = new Map();
           lastRealtimeChangeSummary = null;
           renderSummary(payload);
@@ -1814,7 +1833,7 @@
           .map((slot) => {
             const isRecommended = !slot.isOccupied && recommended?.slotNo === slot.slotNo;
             const statusClass = slot.isOccupied ? "occupied" : "available";
-            const statusText = slot.isOccupied ? "주차 중" : "비어 있음";
+            const statusText = slot.isOccupied ? "꽉 차 있음" : "비어 있음";
             const sensorText = slot.isSensorLinked ? "Arduino" : "가상";
             return `
               <div class="slot-cell ${statusClass}${slot.isSensorLinked ? " sensor" : ""}${isRecommended ? " recommended" : ""}" data-slot="${escapeHtml(slot.label)}">
@@ -1845,7 +1864,7 @@
               </div>
               <div class="slot-legend" aria-label="주차면 상태 범례">
                 <span><i class="slot-dot available"></i>비어 있음</span>
-                <span><i class="slot-dot occupied"></i>주차 중</span>
+                <span><i class="slot-dot occupied"></i>꽉 차 있음</span>
               </div>
             </div>
             ${recommendNotice}

@@ -21,6 +21,7 @@
 ├── index.html              # 루트 프론트엔드 페이지
 ├── public/                 # 정적 프론트엔드 파일
 ├── server.js               # 프론트엔드 서버 및 공공데이터 프록시
+├── fastapi_parking_bridge.py # ESP32 A1 센서 데이터를 백엔드 DB로 전달하는 브릿지
 ├── api/                    # Vercel API 엔트리
 ├── backend/                # Express + SQLite 백엔드
 │   ├── server.js
@@ -70,6 +71,43 @@ npm start
 - http://localhost:3001
 - http://localhost:3001/demo.html
 - http://localhost:3001/health
+
+## ESP32 A1 센서 브릿지 실행
+
+강원대학교 주차장6의 A1 칸은 ESP32/FastAPI 브릿지와 연결됩니다. ESP32는 FastAPI 브릿지로 `spotId/status` 값을 보내고, 브릿지는 값을 `KNU_PARKING_6_A1`로 변환해 Express 백엔드의 `/api/parking/status`로 전달합니다. Express 백엔드는 SQLite DB에 저장하고, 웹 화면은 DB 값을 1초마다 읽어 A1 색상을 갱신합니다.
+
+```bash
+python -m uvicorn fastapi_parking_bridge:app --reload --host 0.0.0.0 --port 8000
+```
+
+기본 주소:
+
+- FastAPI 브릿지: `http://localhost:8000`
+- ESP32 전송 주소: `http://PC_IP:8000/api/parking/status`
+
+ESP32 전송 예시:
+
+```json
+{
+  "spotId": "A1",
+  "status": "OCCUPIED"
+}
+```
+
+상태 매핑:
+
+- `OCCUPIED` -> `KNU_PARKING_6_A1` 저장값 `true` -> 화면 A1 빨간색, `꽉 차 있음`
+- `EMPTY` -> `KNU_PARKING_6_A1` 저장값 `false` -> 화면 A1 초록색, `비어 있음`
+
+전체 흐름:
+
+```text
+ESP32
+  -> FastAPI bridge (:8000)
+  -> Express backend (:3001)
+  -> SQLite arduino_slots
+  -> Web app (:8080), 1초 폴링으로 A1 반영
+```
 
 ## 환경변수
 
