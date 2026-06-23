@@ -1751,16 +1751,13 @@
         const chargeText =
           item.chargeSummary ||
           (item.hasOperationInfo ? "요금 세부값 미제공" : "요금정보 없음");
-        const sourceRows = formatSourceRows(item);
         const distanceText = formatDestinationDistance(item.destinationDistanceM);
         button.innerHTML = `
           <strong>${escapeHtml(item.name || "주차장")}</strong>
           <span data-slot-display>여유 ${escapeHtml(item.realtimeAvailable || "-")} / 총 ${escapeHtml(item.realtimeTotal || item.total || "-")}면 ${escapeHtml(formatItemDelta(item))}</span>
           ${distanceText ? `<span>목적지까지 ${escapeHtml(distanceText)} · AI 기준: ${escapeHtml(preferenceLabel(item.recommendationPreference))}</span>` : ""}
           <span>${escapeHtml(item.address || "주소 없음")}</span>
-          <span>${escapeHtml(coordinateLabel(item.coordinateSource))} · ${escapeHtml(operationText)}</span>
-          ${sourceRows}
-          <span>${escapeHtml(chargeText)}</span>
+          <span>${escapeHtml(operationText)} · ${escapeHtml(chargeText)}</span>
           ${reason ? `<p class="result-reason">${escapeHtml(reason)}</p>` : ""}
         `;
         button.addEventListener("click", () => {
@@ -1779,18 +1776,14 @@
       function showParkingInfo(marker, item) {
         const decoratedItem = decorateArduinoItem(item);
         const operationRows = formatOperationRows(item);
-        const sourceRows = formatSourceRows(item, true);
         activeParkingItem = decoratedItem;
         renderParkingPanel(decoratedItem);
         infoWindow.setContent(`
-          <div style="padding:12px 14px;min-width:280px;font-size:13px;line-height:1.55">
-            <strong>${escapeHtml(decoratedItem.name || "주차장")}</strong><br>
-            <span>관리번호: ${escapeHtml(decoratedItem.managementNo || "-")}</span><br>
-            <span>여유 ${escapeHtml(decoratedItem.realtimeAvailable || "-")} / 총 ${escapeHtml(decoratedItem.realtimeTotal || decoratedItem.total || "-")}면 ${escapeHtml(formatItemDelta(decoratedItem))}</span><br>
-            ${sourceRows}
-            <span>${escapeHtml(coordinateLabel(decoratedItem.coordinateSource))}</span><br>
+          <div style="padding:12px 14px;min-width:220px;max-width:300px;font-size:13px;line-height:1.6">
+            <strong style="font-size:14px">${escapeHtml(decoratedItem.name || "주차장")}</strong><br>
+            <span style="color:#555">여유 ${escapeHtml(decoratedItem.realtimeAvailable || "-")} / 총 ${escapeHtml(decoratedItem.realtimeTotal || decoratedItem.total || "-")}면 ${escapeHtml(formatItemDelta(decoratedItem))}</span><br>
             ${operationRows}
-            <span>${escapeHtml(decoratedItem.address || "")}</span>
+            <span style="color:#777;font-size:12px">${escapeHtml(decoratedItem.address || "")}</span>
           </div>
         `);
         infoWindow.open(map, marker);
