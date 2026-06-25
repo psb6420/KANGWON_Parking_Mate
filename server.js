@@ -9,7 +9,7 @@ loadEnvFile(path.join(__dirname, "backend", ".env"));
 const PORT = 8080;
 const ROOT = __dirname;
 const GANGNEUNG_API_ROOT = "https://apis.data.go.kr/4201000/GNitsTrafficInfoService_1.0";
-const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 const FETCH_TIMEOUT_MS = 30000;
 const RETRY_COUNT = 2;
 const REALTIME_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
@@ -684,10 +684,11 @@ async function analyzeParkingReasons(destination, lots) {
   const prompt = [
     "너는 강원 Parking Mate의 주차장 추천 이유 생성기다.",
     `목적지: ${destination}`,
-    "아래 주차장 목록에 대해 각각 1~2문장의 추천 이유를 한국어로 작성해라.",
+    `아래 주차장 목록 ${lots.length}개 전부에 대해 각각 1~2문장의 추천 이유를 한국어로 작성해라.`,
     "가용 주차면 수와 목적지까지의 거리를 근거로 설명해라.",
-    "반드시 JSON만 반환해라. 형식: {\"reasons\":[{\"managementNo\":\"...\",\"reason\":\"...\"},...]}",
-    "각 항목의 managementNo는 입력 데이터의 managementNo= 값을 그대로 사용해라.",
+    `반드시 JSON만 반환해라. reasons 배열에 반드시 ${lots.length}개 항목이 있어야 한다.`,
+    "형식: {\"reasons\":[{\"managementNo\":\"...\",\"reason\":\"...\"},...]}",
+    "각 항목의 managementNo는 입력 데이터의 managementNo= 값을 그대로 복사해라. 절대 바꾸지 마라.",
     "주차장 목록:",
     lotsText,
   ].join("\n");
