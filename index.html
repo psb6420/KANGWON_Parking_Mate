@@ -478,6 +478,15 @@
         background: var(--panel);
       }
 
+      .summary > summary {
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--ink);
+        padding: 2px 0 6px;
+        list-style: revert;
+      }
+
       .summary strong {
         display: block;
         margin-bottom: 5px;
@@ -541,9 +550,10 @@
         width: 100%;
         height: auto;
         min-height: 82px;
-        padding: 12px;
+        padding: 12px 12px 12px 16px;
         text-align: left;
         border: 1px solid var(--line);
+        border-left-width: 4px;
         border-left: 4px solid var(--green);
         border-radius: 8px;
         background: #fff;
@@ -563,6 +573,12 @@
       .result-item:hover {
         border-color: var(--line-strong);
         transform: translateY(-1px);
+      }
+
+      .result-item.selected {
+        border-color: var(--blue);
+        background: rgba(23, 105, 224, 0.07);
+        box-shadow: 0 0 0 2px rgba(23, 105, 224, 0.18);
       }
 
       .result-item strong {
@@ -712,33 +728,6 @@
         color: #fff;
       }
 
-      @media (max-width: 920px) {
-        .app {
-          grid-template-columns: 1fr;
-        }
-
-        .sidebar {
-          max-height: none;
-          border-right: 0;
-          border-bottom: 1px solid var(--line);
-        }
-
-        #map {
-          height: calc(100vh - 76px);
-        }
-
-        .map-toolbar {
-          left: 12px;
-          right: 12px;
-          flex-wrap: wrap;
-        }
-
-        .parking-panel {
-          left: 12px;
-          right: 12px;
-          width: auto;
-        }
-      }
     </style>
   </head>
   <body>
@@ -802,7 +791,7 @@
         <div class="status" id="status">
           강릉 실시간 주차 정보를 자동으로 불러오는 중입니다.
         </div>
-        <section class="summary" id="summary" hidden></section>
+        <details class="summary" id="summary" hidden></details>
         <details class="api-responses" id="gangneungInfoResponses" hidden>
           <summary>getParkInfo 강릉시 주차장 정보 API 응답</summary>
           <pre id="gangneungInfoResponseJson"></pre>
@@ -873,13 +862,31 @@
       let kakaoSdkLoadingPromise = null;
       const parkingMarkers = [];
       const geocodeCache = new Map();
+      let destinationMarker = null;
+
+      function makeMarkerImage(color, isDestination = false) {
+        const w = 28, h = 36;
+        const inner = isDestination
+          ? `<text x="14" y="21" text-anchor="middle" font-family="sans-serif" font-size="14" font-weight="bold" fill="white">★</text>`
+          : `<circle cx="14" cy="14" r="6" fill="white" opacity="0.35"/>`;
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.3 21.7 0 14 0z" fill="${color}"/>${inner}</svg>`;
+        const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+        return new kakao.maps.MarkerImage(url, new kakao.maps.Size(w, h), { offset: new kakao.maps.Point(14, h) });
+      }
+
+      function parkingMarkerColor(item) {
+        const ratio = availabilityRatio(item);
+        if (ratio >= 0.5) return '#19a463';
+        if (ratio >= 0.2) return '#f5a623';
+        return '#e53935';
+      }
       window.__parkingDebug = { positions: [] };
 
       const mapWrapEl = document.querySelector("#mapWrap");
       const appShellEl = document.querySelector("#appShell");
       const statusEl = document.querySelector("#status");
       const summaryEl = document.querySelector("#summary");
-      const gangneungInfoResponsesEl = document.querySelector(
+const gangneungInfoResponsesEl = document.querySelector(
         "#gangneungInfoResponses",
       );
       const gangneungInfoResponseJsonEl = document.querySelector(
@@ -1036,6 +1043,7 @@
           const slotSpan = card?.querySelector("[data-slot-display]");
           if (slotSpan) {
             slotSpan.textContent = `여유 ${updatedRow.realtimeAvailable || "-"} / 총 ${updatedRow.realtimeTotal || updatedRow.total || "-"}면 ${formatItemDelta(updatedRow)}`;
+            card.style.borderLeftColor = parkingMarkerColor(updatedRow);
           }
         }
 
@@ -1158,7 +1166,7 @@
           const parsed = await analyzeParkingIntent(query);
           searchFeedbackEl.textContent = `"${parsed.destination}" 목적지를 찾는 중입니다.`;
           const destination = await searchDestinationPlace(parsed.destination);
-          const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference);
+const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference);
           const within1500 = ranked.filter(
             (lot) => Number.isFinite(lot.destinationDistanceM) && lot.destinationDistanceM <= 1500,
           );
@@ -1170,6 +1178,13 @@
           searchFeedbackEl.textContent = `${destination.name} 기준 추천 이유를 생성하는 중입니다.`;
           const reasons = await fetchParkingReasons(destination.name, top3);
           await renderParkingRows(top3, reasons);
+          if (destinationMarker) destinationMarker.setMap(null);
+          destinationMarker = new kakao.maps.Marker({
+            position: new kakao.maps.LatLng(destination.lat, destination.lng),
+            map,
+            image: makeMarkerImage('#1769e0', true),
+            zIndex: 10,
+          });
           if (top3[0]) renderParkingPanel(top3[0]);
           setActiveView("home");
           searchFeedbackEl.textContent = `${destination.name} 기준 AI 추천: ${preferenceLabel(parsed.preference)}.`;
@@ -1218,6 +1233,7 @@
             body: JSON.stringify({
               destination: destinationName,
               lots: lots.map((lot) => ({
+                managementNo: lot.managementNo,
                 name: lot.name,
                 realtimeAvailable: lot.realtimeAvailable,
                 realtimeTotal: lot.realtimeTotal || lot.total,
@@ -1226,7 +1242,7 @@
             }),
           });
           const payload = await response.json().catch(() => ({}));
-          return new Map((payload.reasons || []).map((r) => [r.index, r.reason]));
+          return new Map((payload.reasons || []).map((r) => [r.managementNo, r.reason]));
         } catch {
           return new Map();
         }
@@ -1456,17 +1472,13 @@
         metricRealtimeEl.textContent = formatNumber(payload.realtimeMatchedCount || 0);
         metricRefreshEl.textContent = formatCountdown(payload.nextRealtimeRefreshAt);
         summaryEl.innerHTML = `
-          <div>getParkInfo 수집: ${formatNumber(payload.gangneungInfoCount)}건 / getParkRltm 수집: ${formatNumber(payload.gangneungRealtimeCount)}건</div>
-          <div>주소 병합 마커: ${formatNumber(payload.mergedAddressCount || payload.data?.length || 0)}건 / 주소 중복 출처: ${formatNumber(payload.overlappingAddressCount)}건</div>
-          <strong>수집 결과</strong>
-          <div>대상 지역: ${escapeHtml(payload.targetRegion || "강원")}</div>
-          <div>지역 필터: ${escapeHtml(payload.regionFilterMode || "response-address-field")}</div>
-          <div>사용 API: ${(payload.sourceApis || []).map(escapeHtml).join(", ")}</div>
-          <div>실시간 정보 매칭: ${formatNumber(payload.realtimeMatchedCount)}건</div>
+          <summary>데이터 수집 현황</summary>
+          <div>수집 주차장: ${formatNumber(payload.gangneungInfoCount)}건 / 실시간 매칭: ${formatNumber(payload.realtimeMatchedCount)}건</div>
           <div>지도 표시: ${formatNumber(payload.data?.length || 0)}건</div>
+          <div>대상 지역: ${escapeHtml(payload.targetRegion || "강원")}</div>
           <div>실시간 갱신 주기: 5분</div>
-          <div>마지막 실시간 갱신: ${escapeHtml(formatDateTime(payload.lastRealtimeRefreshedAt))}</div>
-          <div>다음 실시간 갱신 예정: ${escapeHtml(formatDateTime(payload.nextRealtimeRefreshAt))}</div>
+          <div>마지막 갱신: ${escapeHtml(formatDateTime(payload.lastRealtimeRefreshedAt))}</div>
+          <div>다음 갱신 예정: ${escapeHtml(formatDateTime(payload.nextRealtimeRefreshAt))}</div>
           <div>다음 갱신까지: <strong id="refreshCountdown">${escapeHtml(formatCountdown(payload.nextRealtimeRefreshAt))}</strong></div>
           <div>최근 자리수 변경: ${escapeHtml(formatServerComparison(payload.gangneungRealtimeComparison) || formatChangeSummary())}</div>
           <div>첫 호출 대비: ${escapeHtml(formatServerComparison(payload.gangneungRealtimeBaselineComparison) || "-")}</div>
@@ -1594,7 +1606,7 @@
             lng: position.getLng(),
             source: item.coordinateSource,
           });
-          const marker = new kakao.maps.Marker({ position, map });
+          const marker = new kakao.maps.Marker({ position, map, image: makeMarkerImage(parkingMarkerColor(item)) });
           parkingMarkers.push(marker);
           bounds.extend(position);
           kakao.maps.event.addListener(marker, "click", () =>
@@ -1612,7 +1624,7 @@
 
         displayRows.slice(0, 100).forEach(({ item }, index) => {
           resultsEl.appendChild(
-            createResultButton(item, parkingMarkers[index], reasons.get(index)),
+            createResultButton(item, parkingMarkers[index], reasons.get(item.managementNo)),
           );
         });
 
@@ -1745,6 +1757,7 @@
         button.type = "button";
         button.className = "result-item";
         button.dataset.managementNo = item.managementNo || "";
+        button.style.borderLeftColor = parkingMarkerColor(item);
         const operationText =
           item.operationSummary ||
           (item.hasOperationInfo ? "운영시간 미제공" : "운영정보 없음");
@@ -1764,6 +1777,7 @@
           ${reason ? `<p class="result-reason">${escapeHtml(reason)}</p>` : ""}
         `;
         button.addEventListener("click", () => {
+          setActiveView("map");
           map.setCenter(marker.getPosition());
           showParkingInfo(marker, item);
         });
@@ -1776,11 +1790,19 @@
         return `${Math.round(distanceM)}m`;
       }
 
+      function setSelectedResultCard(managementNo) {
+        document.querySelectorAll(".result-item.selected").forEach((el) => el.classList.remove("selected"));
+        if (!managementNo) return;
+        const card = document.querySelector(`.result-item[data-management-no="${CSS.escape(String(managementNo))}"]`);
+        if (card) card.classList.add("selected");
+      }
+
       function showParkingInfo(marker, item) {
         const decoratedItem = decorateArduinoItem(item);
         const operationRows = formatOperationRows(item);
         const sourceRows = formatSourceRows(item, true);
         activeParkingItem = decoratedItem;
+        setSelectedResultCard(decoratedItem.managementNo);
         renderParkingPanel(decoratedItem);
         infoWindow.setContent(`
           <div style="padding:12px 14px;min-width:280px;font-size:13px;line-height:1.55">
@@ -1816,7 +1838,8 @@
       function renderArduinoSlotBoard(item) {
         if (!item?.arduinoLotId) return "";
         const slots = item.arduinoSlots || defaultVirtualSlots();
-        const recommended = findRecommendedSlot(slots);
+        const hasActiveSearch = Number.isFinite(item.destinationDistanceM);
+        const recommended = hasActiveSearch ? findRecommendedSlot(slots) : null;
         const cells = slots
           .map((slot) => {
             const isRecommended = !slot.isOccupied && recommended?.slotNo === slot.slotNo;
@@ -1836,7 +1859,9 @@
           })
           .join("");
 
-        const recommendNotice = recommended
+        const recommendNotice = !hasActiveSearch
+          ? ""
+          : recommended
           ? `<div class="slot-recommend-notice">
                공학 3호관 최근접 추천: <strong>${escapeHtml(recommended.label)}</strong>
                ${recommended.isSensorLinked ? "· Arduino 실시간 확인" : ""}
@@ -1948,6 +1973,7 @@
         parkingMarkers.length = 0;
         lastRenderedMarkerCount = 0;
         resultsEl.innerHTML = "";
+if (destinationMarker) { destinationMarker.setMap(null); destinationMarker = null; }
         if (centerMarker && map) centerMarker.setMap(map);
       }
 
@@ -2154,6 +2180,7 @@
       tabButtons.forEach((button) => {
         button.addEventListener("click", () => setActiveView(button.dataset.view));
       });
+
       destinationSearchButton.addEventListener("click", applyDestinationSearch);
       destinationInput.addEventListener("keydown", (event) => {
         if (event.key === "Enter") applyDestinationSearch();

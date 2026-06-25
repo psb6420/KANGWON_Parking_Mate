@@ -319,6 +319,32 @@
         box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.85);
       }
 
+      .slot-cell.recommended {
+        outline: 2.5px solid #f0c040;
+        outline-offset: -2px;
+      }
+
+      .recommend-badge {
+        display: inline-block;
+        margin-top: 2px;
+        padding: 1px 5px;
+        border-radius: 4px;
+        background: rgba(255, 255, 255, 0.25);
+        color: #fff;
+        font-size: 9px;
+        font-weight: 800;
+        letter-spacing: 0.2px;
+      }
+
+      .site-label small {
+        display: block;
+        margin-top: 3px;
+        color: #1769e0;
+        font-size: 9px;
+        font-weight: 800;
+        letter-spacing: 0;
+      }
+
       .control-panel,
       .summary,
       .api-responses {
@@ -1074,7 +1100,7 @@
             const comfortScore = ratio;
             const score =
               preference === "near"
-                ? distanceScore * 0.78 + comfortScore * 0.22
+                ? distanceScore
                 : preference === "comfort"
                   ? comfortScore * 0.72 + distanceScore * 0.28
                   : distanceScore * 0.52 + comfortScore * 0.48;
@@ -1108,8 +1134,8 @@
           searchFeedbackEl.textContent = `"${parsed.destination}" 목적지를 찾는 중입니다.`;
           const destination = await searchDestinationPlace(parsed.destination);
           const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference);
-          await renderParkingRows(ranked);
-          if (ranked[0]) renderParkingPanel(ranked[0]);
+          const top3 = ranked.slice(0, 3);
+          await renderParkingRows(top3);
           setActiveView("home");
           searchFeedbackEl.textContent =
             `${destination.name} 기준 AI 추천: ${preferenceLabel(parsed.preference)}. ${parsed.reason}`;
@@ -1712,32 +1738,63 @@
         infoWindow.open(map, marker);
       }
 
+      function findNearestSlotForBuilding(slots, buildingCol, buildingRow) {
+        const COLS = 4;
+        const withDist = slots.map((slot) => {
+          const idx = slot.slotNo - 1;
+          const col = idx % COLS;
+          const row = Math.floor(idx / COLS);
+          const dist = Math.sqrt(Math.pow(col - buildingCol, 2) + Math.pow(row - buildingRow, 2));
+          return { slot, dist };
+        });
+        const available = withDist.filter(({ slot }) => !slot.isOccupied);
+        const candidates = available.length > 0 ? available : withDist;
+        candidates.sort((a, b) => a.dist - b.dist);
+        return candidates[0]?.slot ?? null;
+      }
+
       function renderArduinoSlotBoard(item) {
         if (!item?.arduinoLotId) return "";
         const slots = item.arduinoSlots || defaultVirtualSlots();
+
+        // 각 건물에 가장 가까운 빈 주차면 계산 (4×3 그리드 기준)
+        const nearLeft   = findNearestSlotForBuilding(slots, -0.5, 1.0); // 공학 3호관
+        const nearRight  = findNearestSlotForBuilding(slots,  3.5, 1.0); // 60주년 기념관
+        const nearBottom = findNearestSlotForBuilding(slots,  1.5, 2.5); // 백록관
+
+        const recommendedLabels = new Set(
+          [nearLeft, nearRight, nearBottom].filter(Boolean).map((s) => s.label)
+        );
+
         const cells = slots
           .map((slot) => {
             const statusClass = slot.isOccupied ? "occupied" : "available";
             const statusText = slot.isOccupied ? "주차 중" : "비어 있음";
             const sensorText = slot.isSensorLinked ? "Arduino" : "가상";
+            const isRec = recommendedLabels.has(slot.label);
             return `
-              <div class="slot-cell ${statusClass}${slot.isSensorLinked ? " sensor" : ""}" data-slot="${escapeHtml(slot.label)}">
+              <div class="slot-cell ${statusClass}${slot.isSensorLinked ? " sensor" : ""}${isRec ? " recommended" : ""}" data-slot="${escapeHtml(slot.label)}">
                 <div>
                   <strong>${escapeHtml(slot.label)}</strong>
                   <span>${escapeHtml(statusText)}</span>
                   <span>${escapeHtml(sensorText)}</span>
+                  ${isRec ? '<span class="recommend-badge">추천</span>' : ""}
                 </div>
               </div>
             `;
           })
           .join("");
 
+        const leftLabel   = nearLeft   ? `<small>최근접: ${escapeHtml(nearLeft.label)}</small>`   : "";
+        const rightLabel  = nearRight  ? `<small>최근접: ${escapeHtml(nearRight.label)}</small>`  : "";
+        const bottomLabel = nearBottom ? `<small>최근접: ${escapeHtml(nearBottom.label)}</small>` : "";
+
         return `
           <section class="slot-panel" aria-label="강원대학교 주차장6 주차면">
             <div class="slot-panel-head">
               <div>
                 <strong>4 x 3 주차면</strong>
-                <span class="panel-meta">A1-A12, A1은 Arduino 센서와 연결</span>
+                <span class="panel-meta">A1-A12, A1은 Arduino 센서와 연결 · 노란 테두리 = 각 건물 최근접 빈 자리</span>
               </div>
               <div class="slot-legend" aria-label="주차면 상태 범례">
                 <span><i class="slot-dot available"></i>비어 있음</span>
@@ -1745,12 +1802,12 @@
               </div>
             </div>
             <div class="slot-site-map" aria-label="주차장 주변 건물 배치">
-              <div class="site-label left">공학 3호관</div>
+              <div class="site-label left">공학 3호관${leftLabel}</div>
               <div class="slot-board-wrap">
                 <div class="slot-board">${cells}</div>
               </div>
-              <div class="site-label right">60주년 기념관</div>
-              <div class="site-label bottom">백록관</div>
+              <div class="site-label right">60주년 기념관${rightLabel}</div>
+              <div class="site-label bottom">백록관${bottomLabel}</div>
             </div>
           </section>
         `;
