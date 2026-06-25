@@ -5,3 +5,5 @@ backend/*.db
 backend/*.db-shm
 backend/*.db-wal
 backend/node_modules/
+parking-cache.json
+reasons-cache.json
