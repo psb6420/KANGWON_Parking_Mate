@@ -798,8 +798,10 @@
           <pre id="gangneungRealtimeResponseJson"></pre>
         </details>
         <div class="section-title">
-          <h2>추천 주차장</h2>
-          <span>지도 마커와 연동</span>
+          <div>
+            <h2 style="margin:0">추천 주차장</h2>
+            <span style="font-size:12px;color:#888">주차장을 누르면 지도에서 확인할 수 있어요</span>
+          </div>
         </div>
         <section class="results" id="results" aria-live="polite"></section>
       </aside>
@@ -860,6 +862,7 @@
       const parkingMarkers = [];
       const geocodeCache = new Map();
       let destinationMarker = null;
+      let lastDestination = null;
 
       function makeMarkerImage(color, isDestination = false) {
         const w = 28, h = 36;
@@ -1171,6 +1174,7 @@ const gangneungInfoResponsesEl = document.querySelector(
           const parsed = await analyzeParkingIntent(query);
           searchFeedbackEl.textContent = `"${parsed.destination}" 목적지를 찾는 중입니다.`;
           const destination = await searchDestinationPlace(parsed.destination);
+          lastDestination = destination;
 const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference);
           const within1500 = ranked.filter(
             (lot) => Number.isFinite(lot.destinationDistanceM) && lot.destinationDistanceM <= 1500,
@@ -1314,7 +1318,7 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
           level: 10,
         });
         map.setMapTypeId(kakao.maps.MapTypeId.ROADMAP);
-        infoWindow = new kakao.maps.InfoWindow({ removable: true });
+        infoWindow = new kakao.maps.InfoWindow({ removable: true, zIndex: 100 });
         geocoder = new kakao.maps.services.Geocoder();
         centerMarker = new kakao.maps.Marker({ position: center, map });
         mapWrapEl.classList.add("map-ready");
@@ -1776,8 +1780,11 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
         `;
         button.addEventListener("click", () => {
           setActiveView("map");
-          map.setCenter(marker.getPosition());
           showParkingInfo(marker, item);
+          setTimeout(() => {
+            map.setCenter(marker.getPosition());
+            map.setLevel(4);
+          }, 100);
         });
         return button;
       }
@@ -1879,12 +1886,11 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
               <strong>${total}</strong>
             </div>
             <div class="metric">
-              <span>변화</span>
-              <strong>${escapeHtml(formatItemDelta(item) || "-")}</strong>
+              <span>5분 전 대비</span>
+              <strong>${escapeHtml((() => { const d = formatItemDelta(item); const m = d.match(/([+-]\d+)면/); return m ? m[1] + "면" : "-"; })())}</strong>
             </div>
           </div>
           <p class="panel-meta">${escapeHtml(operationText)}</p>
-          <p class="panel-meta">${escapeHtml(coordinateLabel(item.coordinateSource))}</p>
           ${renderArduinoSlotBoard(item)}
         `;
       }
@@ -2026,7 +2032,7 @@ if (destinationMarker) { destinationMarker.setMap(null); destinationMarker = nul
           itemOrManagementNo.realtimeChange
         ) {
           const change = itemOrManagementNo.realtimeChange;
-          return `(서버비교 ${change.previousAvailable}→${change.currentAvailable}, ${formatSigned(change.delta)}면)`;
+          return `(5분 전보다 ${formatSigned(change.delta)}면)`;
         }
         const managementNo =
           typeof itemOrManagementNo === "object"
@@ -2034,7 +2040,7 @@ if (destinationMarker) { destinationMarker.setMap(null); destinationMarker = nul
             : itemOrManagementNo;
         const change = lastRealtimeChanges.get(managementNo);
         if (!change) return "";
-        return `(5분전 대비 ${formatSigned(change.delta)}면)`;
+        return `(5분 전보다 ${formatSigned(change.delta)}면)`;
       }
 
       function formatChangeSummary() {
