@@ -22,7 +22,6 @@ app.use((req, _res, next) => {
   next();
 });
 
-// 정적 파일 (demo.html 등)
 app.use(express.static(path.join(__dirname, "public")));
 
 app.use("/api/config", configRouter);
@@ -50,7 +49,6 @@ app.use((err, _req, res, _next) => {
 
 app.listen(PORT, () => {
   console.log(`강원 Parking Mate Backend: http://localhost:${PORT}`);
-  console.log(`  데모 페이지: http://localhost:${PORT}/demo.html`);
   console.log(`  API Keys: DATA_GO_KR=${Boolean(process.env.DATA_GO_KR_SERVICE_KEY)}, KAKAO=${Boolean(process.env.KAKAO_REST_API_KEY)}, GEMINI=${Boolean(process.env.GEMINI_API_KEY)}`);
 });
 

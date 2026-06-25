@@ -6,7 +6,7 @@ const { URL } = require("node:url");
 loadEnvFile(path.join(__dirname, ".env"));
 loadEnvFile(path.join(__dirname, "backend", ".env"));
 
-const PORT = Number(process.env.PORT || 8080);
+const PORT = 8080;
 const ROOT = __dirname;
 const GANGNEUNG_API_ROOT = "https://apis.data.go.kr/4201000/GNitsTrafficInfoService_1.0";
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
@@ -32,8 +32,60 @@ const MIME = {
   ".jpeg": "image/jpeg",
 };
 
+const CACHE_FILE = path.join(__dirname, "parking-cache.json");
+
 let parkingCache = null;
 let parkingJob = null;
+
+function saveCacheToFile(cache) {
+  try {
+    const serialized = JSON.stringify({
+      payload: cache.payload,
+      snapshot: [...cache.snapshot.entries()],
+    });
+    fs.writeFileSync(CACHE_FILE, serialized, "utf8");
+  } catch {
+    // 파일 저장 실패해도 메모리 캐시는 유지
+  }
+}
+
+function loadCacheFromFile() {
+  try {
+    if (!fs.existsSync(CACHE_FILE)) return null;
+    const raw = JSON.parse(fs.readFileSync(CACHE_FILE, "utf8"));
+    if (!raw?.payload) return null;
+    return {
+      payload: raw.payload,
+      snapshot: new Map(raw.snapshot || []),
+    };
+  } catch {
+    return null;
+  }
+}
+
+parkingCache = loadCacheFromFile();
+
+const REASONS_CACHE_FILE = path.join(__dirname, "reasons-cache.json");
+let reasonsCache = new Map();
+
+(function loadReasonsCacheFromFile() {
+  try {
+    if (!fs.existsSync(REASONS_CACHE_FILE)) return;
+    const raw = JSON.parse(fs.readFileSync(REASONS_CACHE_FILE, "utf8"));
+    reasonsCache = new Map(Object.entries(raw));
+  } catch {}
+})();
+
+function saveReasonsCacheToFile() {
+  try {
+    fs.writeFileSync(REASONS_CACHE_FILE, JSON.stringify(Object.fromEntries(reasonsCache)), "utf8");
+  } catch {}
+}
+
+function reasonsCacheKey(destination, lots) {
+  const ids = lots.map((l) => String(l.managementNo || "")).sort().join(",");
+  return `${destination.trim()}::${ids}`;
+}
 
 function loadEnvFile(filePath) {
   if (!fs.existsSync(filePath)) return;
@@ -328,8 +380,8 @@ function buildMarkerRows(infoRows, realtimeRows, realtimeChangeById = new Map())
       gangneungInfoRaw: info,
       gangneungRealtimeRaw: realtime,
       operationSummary,
-      chargeSummary: "요금 정보는 getParkInfo 제공값 기준으로 확인하세요.",
-      operationDetails: operationSummary ? [`getParkInfo 운영시간: ${operationSummary}`] : [],
+      chargeSummary: "요금 정보 미제공",
+      operationDetails: operationSummary ? [operationSummary] : [],
       hasOperationInfo: Boolean(operationSummary),
     });
   }
@@ -464,6 +516,7 @@ async function proxyParking(reqUrl, res) {
     parkingJob = loadParkingData(serviceKey, parkingCache)
       .then((result) => {
         parkingCache = result;
+        saveCacheToFile(result);
         return result.payload;
       })
       .finally(() => {
@@ -614,6 +667,85 @@ async function analyzeParkingIntent(text) {
   return normalizeParkingIntent(parsed, text, true);
 }
 
+async function analyzeParkingReasons(destination, lots) {
+  const apiKey = cleanSecret(process.env.GEMINI_API_KEY);
+  if (!apiKey) return { reasons: [] };
+
+  const lotsText = lots
+    .map((lot) => {
+      const avail = Number(lot.realtimeAvailable);
+      const total = Number(lot.realtimeTotal);
+      const used = Number.isFinite(avail) && Number.isFinite(total) ? total - avail : null;
+      const occupancy = used !== null ? `빈자리 ${avail}면, 사용중 ${used}면, 전체 ${total}면` : `전체 ${lot.realtimeTotal}면`;
+      return `managementNo=${lot.managementNo} | ${lot.name} (${occupancy}, 거리 ${Math.round(lot.destinationDistanceM || 0)}m)`;
+    })
+    .join("\n");
+
+  const prompt = [
+    "너는 강원 Parking Mate의 주차장 추천 이유 생성기다.",
+    `목적지: ${destination}`,
+    `아래 주차장 목록 ${lots.length}개 전부에 대해 각각 1~2문장의 추천 이유를 한국어로 작성해라.`,
+    "가용 주차면 수와 목적지까지의 거리를 근거로 설명해라.",
+    `반드시 JSON만 반환해라. reasons 배열에 반드시 ${lots.length}개 항목이 있어야 한다.`,
+    "형식: {\"reasons\":[{\"managementNo\":\"...\",\"reason\":\"...\"},...]}",
+    "각 항목의 managementNo는 입력 데이터의 managementNo= 값을 그대로 복사해라. 절대 바꾸지 마라.",
+    "주차장 목록:",
+    lotsText,
+  ].join("\n");
+
+  const response = await fetch(`${GEMINI_API_URL}?key=${encodeURIComponent(apiKey)}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.3,
+        maxOutputTokens: 1500,
+        responseMimeType: "application/json",
+      },
+    }),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.error?.message || `Gemini HTTP ${response.status}`);
+  }
+
+  const outputText = payload?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  const parsed = parseGeminiJson(outputText);
+  return { reasons: Array.isArray(parsed?.reasons) ? parsed.reasons : [] };
+}
+
+async function proxyParkingReasons(req, res) {
+  if (req.method !== "POST") {
+    sendJson(res, 405, { message: "POST method is required." });
+    return;
+  }
+  try {
+    const body = await readJsonBody(req);
+    const destination = String(body?.destination || "").trim();
+    const lots = Array.isArray(body?.lots) ? body.lots : [];
+    if (!destination || lots.length === 0) {
+      sendJson(res, 400, { message: "destination and lots are required." });
+      return;
+    }
+    const cacheKey = reasonsCacheKey(destination, lots);
+    if (reasonsCache.has(cacheKey)) {
+      sendJson(res, 200, { reasons: reasonsCache.get(cacheKey), cached: true });
+      return;
+    }
+    const result = await analyzeParkingReasons(destination, lots);
+    if (result.reasons.length > 0) {
+      reasonsCache.set(cacheKey, result.reasons);
+      saveReasonsCacheToFile();
+    }
+    sendJson(res, 200, result);
+  } catch (error) {
+    console.error("[parking-reasons]", error.message);
+    sendJson(res, 200, { reasons: [] });
+  }
+}
+
 async function proxyParkingIntent(req, res) {
   if (req.method !== "POST") {
     sendJson(res, 405, { message: "POST method is required." });
@@ -649,6 +781,11 @@ function requestHandler(req, res) {
 
   if (reqUrl.pathname === "/api/ai/parking-intent") {
     proxyParkingIntent(req, res);
+    return;
+  }
+
+  if (reqUrl.pathname === "/api/ai/parking-reasons") {
+    proxyParkingReasons(req, res);
     return;
   }
 
