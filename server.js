@@ -6,7 +6,7 @@ const { URL } = require("node:url");
 loadEnvFile(path.join(__dirname, ".env"));
 loadEnvFile(path.join(__dirname, "backend", ".env"));
 
-const PORT = Number(process.env.PORT || 8080);
+const PORT = 8080;
 const ROOT = __dirname;
 const GANGNEUNG_API_ROOT = "https://apis.data.go.kr/4201000/GNitsTrafficInfoService_1.0";
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
