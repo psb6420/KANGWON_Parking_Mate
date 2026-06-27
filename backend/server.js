@@ -15,7 +15,17 @@ const { startPushMonitor } = require("./services/pushMonitor");
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
 
-app.use(cors());
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
+  .split(",").map((s) => s.trim()).filter(Boolean);
+app.use(cors({
+  origin: allowedOrigins.length
+    ? (origin, cb) => {
+        // Capacitor WebView는 origin 없음 또는 https://localhost
+        if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+        cb(Object.assign(new Error("CORS not allowed"), { status: 403 }));
+      }
+    : true,
+}));
 app.use(express.json());
 
 // 요청 로깅 (개발용)
