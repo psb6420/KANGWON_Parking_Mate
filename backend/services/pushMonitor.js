@@ -277,6 +277,24 @@ function notificationPayload(watch, changes) {
   };
 }
 
+function statusPayload(watch, lots, states) {
+  const items = lots
+    .map((lot) => {
+      const state = states.get(lot.management_no);
+      const avail = state?.available ?? integerOrNull(lot.last_available);
+      if (avail === null) return null;
+      return avail === 0 ? `${lot.name} 만차` : `${lot.name} ${avail}면`;
+    })
+    .filter(Boolean);
+  const dest = watch.destination_name ? `${watch.destination_name} ` : "";
+  return {
+    title: `${dest}주차 현황 (변동 없음)`,
+    body: items.join(" · ") || "현황 정보 없음",
+    tag: `parking-watch-${watch.watch_id}`,
+    data: { url: "/?view=map", watchId: watch.watch_id },
+  };
+}
+
 async function runPushMonitor() {
   if (monitorRunning) return { skipped: true };
   monitorRunning = true;
@@ -350,7 +368,10 @@ async function runPushMonitor() {
           update.lot.management_no,
         );
       }
-      if (!changes.length) continue;
+
+      const payload = changes.length
+        ? notificationPayload(watch, changes)
+        : statusPayload(watch, watch.lots, states);
 
       const subscription = {
         endpoint: watch.endpoint,
@@ -359,7 +380,7 @@ async function runPushMonitor() {
       try {
         await webPush.sendNotification(
           subscription,
-          JSON.stringify(notificationPayload(watch, changes)),
+          JSON.stringify(payload),
           { TTL: 120 },
         );
         for (const change of changes) {
