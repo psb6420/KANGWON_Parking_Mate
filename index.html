@@ -1152,6 +1152,18 @@
       }
       .reroute-btn-yes { background: #1769e0; color: #fff; }
       .reroute-btn-no { background: var(--panel-soft); color: var(--ink); border: 1px solid var(--line); }
+      .reroute-btn-mic {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid var(--blue);
+        border-radius: 10px;
+        background: #f0f5ff;
+        color: var(--blue);
+        font-size: 14px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .reroute-btn-mic:disabled { opacity: 0.5; cursor: wait; }
 
       .debug-slot-toggle {
         position: fixed;
@@ -1321,6 +1333,7 @@
           <span id="rerouteNextName" class="reroute-next-name"></span>으로 경로를 변경할까요?
         </div>
         <div class="reroute-status" id="rerouteStatus"></div>
+        <button class="reroute-btn-mic" id="rerouteBtnMic" hidden>🎤 다시 말하기</button>
         <div class="reroute-actions">
           <button class="reroute-btn reroute-btn-yes" id="rerouteBtnYes">예</button>
           <button class="reroute-btn reroute-btn-no" id="rerouteBtnNo">아니오</button>
@@ -1531,6 +1544,8 @@
         return new Promise((resolve) => {
           const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
           if (!SR) { resolve(""); return; }
+          // 목적지 검색용 recognition이 활성 중이면 먼저 중지
+          if (recognition && isListening) { try { recognition.stop(); } catch {} }
           const rec = new SR();
           rec.lang = "ko-KR";
           rec.continuous = false;
@@ -1577,10 +1592,12 @@
         const statusEl = document.getElementById("rerouteStatus");
         const btnYes   = document.getElementById("rerouteBtnYes");
         const btnNo    = document.getElementById("rerouteBtnNo");
+        const btnMic   = document.getElementById("rerouteBtnMic");
 
         titleEl.textContent = `${fullLotName} 만차`;
         nextEl.textContent  = nextLot.name;
-        statusEl.textContent = "";
+        statusEl.textContent = "예 / 아니오 버튼으로 선택하거나 음성으로 말씀하세요.";
+        if (btnMic) { btnMic.hidden = false; btnMic.disabled = false; }
         overlay.hidden = false;
 
         const question = `${fullLotName}이 만차입니다. ${nextLot.name}으로 경로를 변경할까요? 예 또는 아니오로 말씀해 주세요.`;
@@ -1588,6 +1605,7 @@
         const cleanup = (navigating) => {
           overlay.hidden = true;
           rerouteActive = false;
+          if (btnMic) btnMic.hidden = true;
           if (!navigating) speak("기존 경로를 유지합니다.");
         };
 
@@ -1606,27 +1624,37 @@
         btnYes.onclick = doReroute;
         btnNo.onclick  = () => cleanup(false);
 
-        // TTS 질문
-        await speak(question);
-
-        // STT 수신
-        statusEl.innerHTML = `<div class="reroute-listening"><div class="reroute-mic-pulse"></div>듣는 중…</div>`;
-        const heard = await listenForVoice();
-        statusEl.textContent = heard ? `"${heard}"` : "음성을 인식하지 못했습니다.";
-
-        if (!overlay.hidden) {
-          const isYes = await interpretYesNo(heard);
-          if (isYes === true) {
-            await doReroute();
-          } else if (isYes === false) {
-            cleanup(false);
-          } else {
-            // null: 판단 불가 → 버튼 대기 유지
-            statusEl.textContent = heard
-              ? `"${heard}" — 버튼으로 선택해 주세요.`
-              : "버튼으로 선택해 주세요.";
+        // STT 한 번 시도 후 결과 처리
+        const runVoice = async () => {
+          if (!overlay.hidden) {
+            if (btnMic) btnMic.disabled = true;
+            statusEl.innerHTML = `<div class="reroute-listening"><div class="reroute-mic-pulse"></div>듣는 중…</div>`;
+            const heard = await listenForVoice(7000);
+            if (btnMic) btnMic.disabled = false;
+            if (!overlay.hidden) {
+              const isYes = await interpretYesNo(heard);
+              if (isYes === true) {
+                await doReroute();
+              } else if (isYes === false) {
+                cleanup(false);
+              } else {
+                statusEl.textContent = heard
+                  ? `"${heard}" — 버튼으로 선택하거나 다시 말해 주세요.`
+                  : "음성 인식 실패 — 버튼으로 선택하거나 다시 말하기를 눌러 주세요.";
+              }
+            }
           }
-        }
+        };
+
+        if (btnMic) btnMic.onclick = runVoice;
+
+        // TTS 질문 (실패해도 계속)
+        await speak(question);
+        // TTS 끝난 후 400ms 대기 (마이크가 TTS 잔향 안 받도록)
+        await new Promise((r) => setTimeout(r, 400));
+
+        // 자동 STT 시작 (user gesture 없는 환경에서 실패하면 "다시 말하기" 버튼으로 재시도)
+        await runVoice();
       }
 
       async function startRecommendationPushWatch(navigatedItem) {
