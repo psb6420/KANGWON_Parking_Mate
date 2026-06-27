@@ -1176,7 +1176,12 @@
     <script>
       const DEFAULT_POSITION = { lat: 37.8228, lng: 128.1555 };
       const REALTIME_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
-      let parkingBackendOrigin = `${window.location.protocol}//${window.location.hostname}:3001`;
+      const runtimeConfig = window.PARKING_MATE_RUNTIME_CONFIG || {};
+      const appApiOrigin = String(runtimeConfig.appApiOrigin || "").trim().replace(/\/$/, "");
+      let parkingBackendOrigin = String(
+        runtimeConfig.backendOrigin || `${window.location.protocol}//${window.location.hostname}:3001`,
+      ).trim().replace(/\/$/, "");
+      const appApiUrl = (path) => `${appApiOrigin}${path}`;
       const KNU_PARKING_LOT_ID = "KNU_PARKING_6";
       const VIRTUAL_SLOT_COUNT = 12;
       const KAKAO_JS_SDK_URL = "https://t1.kakaocdn.net/kakao_js_sdk/2.8.1/kakao.min.js";
@@ -1339,7 +1344,12 @@
 
       async function startRecommendationPushWatch(navigatedItem) {
         if (!("Notification" in window) || !("PushManager" in window)) {
-          throw new Error("이 모바일 브라우저는 푸시 알림을 지원하지 않습니다.");
+          const isIos = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+          const isStandalone = window.navigator.standalone === true;
+          if (isIos && !isStandalone) {
+            throw new Error("iPhone에서 푸시 알림을 받으려면: Safari로 접속 → 공유(□↑) → '홈 화면에 추가' → 홈 화면 아이콘으로 실행");
+          }
+          throw new Error("이 브라우저는 푸시 알림을 지원하지 않습니다.");
         }
         if (!window.isSecureContext) {
           throw new Error("모바일 푸시 알림은 HTTPS 주소가 필요합니다.");
@@ -1465,7 +1475,7 @@
       }
 
       async function analyzeParkingIntent(text) {
-        const response = await fetch("/api/ai/parking-intent", {
+        const response = await fetch(appApiUrl("/api/ai/parking-intent"), {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ text }),
@@ -1762,7 +1772,7 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
 
       async function fetchParkingReasons(destinationName, lots) {
         try {
-          const response = await fetch("/api/ai/parking-reasons", {
+          const response = await fetch(appApiUrl("/api/ai/parking-reasons"), {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
@@ -1787,7 +1797,7 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
 
       function loadClientConfig() {
         if (clientConfigLoadingPromise) return clientConfigLoadingPromise;
-        clientConfigLoadingPromise = fetch("/api/config")
+        clientConfigLoadingPromise = fetch(appApiUrl("/api/config"))
           .then((response) => (response.ok ? response.json() : {}))
           .then((config) => {
             const kakaoKey = String(config.kakaoJavascriptKey || "").trim();
@@ -2014,7 +2024,7 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
         if (serviceKey) params.set("serviceKey", serviceKey);
         if (refresh) params.set("refresh", "1");
         const response = await fetch(
-          `/api/parking/gangwon-realtime?${params.toString()}`,
+          appApiUrl(`/api/parking/gangwon-realtime?${params.toString()}`),
         );
         const text = await response.text();
         const payload = parseMaybeJson(text);
@@ -2032,7 +2042,7 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
         const params = new URLSearchParams();
         if (serviceKey) params.set("serviceKey", serviceKey);
         const response = await fetch(
-          `/api/parking/realtime-refresh?${params.toString()}`,
+          appApiUrl(`/api/parking/realtime-refresh?${params.toString()}`),
         );
         const text = await response.text();
         const payload = parseMaybeJson(text);
