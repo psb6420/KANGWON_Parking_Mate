@@ -32,12 +32,12 @@ self.addEventListener("notificationclick", (event) => {
       const target = clients.find((c) => "focus" in c);
 
       if (target) {
+        // 기존 창이 있으면 절대 navigate 금지 — navigate()는 페이지 리로드를 일으킴
         if (notifData.action === "reroute") {
-          // reroute: postMessage만 보내고 navigate 금지 (navigate하면 페이지 리로드로 메시지 유실)
           target.postMessage({ type: "parking-reroute", ...notifData });
-          return target.focus();
+        } else {
+          target.postMessage({ type: "switch-view", view: "map" });
         }
-        if ("navigate" in target) target.navigate(targetUrl);
         return target.focus();
       }
 

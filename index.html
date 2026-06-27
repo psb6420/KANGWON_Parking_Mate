@@ -3324,6 +3324,8 @@ if (destinationMarker) { destinationMarker.setMap(null); destinationMarker = nul
         navigator.serviceWorker.addEventListener("message", (event) => {
           if (event.data?.type === "parking-reroute") {
             startRerouteFlow(event.data);
+          } else if (event.data?.type === "switch-view") {
+            setActiveView(event.data.view || "map");
           }
         });
       }
