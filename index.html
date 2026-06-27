@@ -3527,6 +3527,17 @@ if (destinationMarker) { destinationMarker.setMap(null); destinationMarker = nul
           const u = new SpeechSynthesisUtterance("");
           u.volume = 0;
           try { window.speechSynthesis.speak(u); } catch {}
+          // iOS webkitSpeechRecognition은 getUserMedia와 별도 권한 — user gesture 내에서 미리 요청
+          const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+          if (SR) {
+            try {
+              const warmup = new SR();
+              warmup.onstart = () => { try { warmup.abort(); } catch {} };
+              warmup.onerror = () => {};
+              warmup.onend = () => {};
+              warmup.start();
+            } catch {}
+          }
           overlay.remove();
         }, { once: true });
         overlay.querySelector("#ttsDenyBtn").addEventListener("click", () => {
