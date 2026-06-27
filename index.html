@@ -2499,6 +2499,11 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
           );
           updateRefreshSchedule(payload);
           startRealtimeAutoRefresh(serviceKey);
+          // 알림 탭으로 앱이 새로 열렸을 때 → map 뷰 자동 전환
+          if (window.__pendingView) {
+            setActiveView(window.__pendingView);
+            window.__pendingView = null;
+          }
         } catch (error) {
           setStatus(`주차장 호출 실패: ${error.message}`);
         }
@@ -3330,17 +3335,25 @@ if (destinationMarker) { destinationMarker.setMap(null); destinationMarker = nul
         });
       }
 
-      // 앱이 닫혀 있다가 알림 탭으로 열린 경우 URL에서 reroute 데이터 복원
-      (function checkPendingReroute() {
+      // 앱이 닫혀 있다가 알림 탭으로 열린 경우 URL에서 상태 복원
+      (function checkPendingState() {
         try {
           const params = new URLSearchParams(window.location.search);
-          const raw = params.get("pendingReroute");
-          if (!raw) return;
-          const data = JSON.parse(decodeURIComponent(raw));
-          // URL에서 파라미터 제거 후 플로우 실행
           const cleanUrl = window.location.pathname + (window.location.hash || "");
-          history.replaceState(null, "", cleanUrl);
-          if (data.action === "reroute") setTimeout(() => startRerouteFlow(data), 3000);
+
+          // ?view=map → 지도 뷰로 자동 전환 (loadParking 완료 후 실행)
+          if (params.get("view") === "map") {
+            window.__pendingView = "map";
+            history.replaceState(null, "", cleanUrl);
+          }
+
+          // ?pendingReroute=... → 경로 변경 플로우 실행
+          const raw = params.get("pendingReroute");
+          if (raw) {
+            const data = JSON.parse(decodeURIComponent(raw));
+            history.replaceState(null, "", cleanUrl);
+            if (data.action === "reroute") setTimeout(() => startRerouteFlow(data), 3000);
+          }
         } catch {}
       })();
     </script>
