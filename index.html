@@ -3284,22 +3284,32 @@ if (destinationMarker) { destinationMarker.setMap(null); destinationMarker = nul
         } catch {}
       })();
 
-      // TTS 활성화 배너: iOS/Android는 user gesture 없이 speak() 불가
-      // 앱 접속 즉시 눈에 띄는 버튼을 표시 → 탭 한 번으로 오디오 컨텍스트 언락
+      // TTS 활성화: iOS/Android는 user gesture 없이 speak() 불가
+      // 브라우저 권한 팝업과 동일한 스타일의 모달로 동의 유도
       (function initTtsActivation() {
         if (!window.speechSynthesis) return;
-        const wrap = document.createElement("div");
-        wrap.style.cssText = "position:fixed;bottom:80px;left:0;right:0;z-index:9998;display:flex;justify-content:center;pointer-events:none;";
-        const btn = document.createElement("button");
-        btn.style.cssText = "background:#1769e0;color:#fff;border:none;padding:12px 24px;border-radius:999px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.3);pointer-events:auto;height:auto;";
-        btn.textContent = "🔊 탭하여 음성 안내 켜기";
-        wrap.appendChild(btn);
-        document.body.appendChild(wrap);
-        btn.addEventListener("click", () => {
+        const overlay = document.createElement("div");
+        overlay.style.cssText = "position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.45);padding:20px;";
+        overlay.innerHTML = `
+          <div style="background:#fff;border-radius:16px;padding:28px 24px;max-width:300px;width:100%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.28);">
+            <div style="font-size:38px;margin-bottom:10px;">🔊</div>
+            <div style="font-size:17px;font-weight:700;margin-bottom:8px;color:#142033;">음성 안내 사용</div>
+            <div style="font-size:13px;color:#66758a;line-height:1.55;margin-bottom:22px;">"강원 Parking Mate"에서<br>주차 경로 안내 음성을 재생하려고 합니다.</div>
+            <div style="display:flex;gap:10px;">
+              <button id="ttsDenyBtn" style="flex:1;height:44px;border:1px solid #d8e1eb;border-radius:10px;background:#f7f9fc;color:#66758a;font-size:14px;font-weight:600;cursor:pointer;">허용 안 함</button>
+              <button id="ttsAllowBtn" style="flex:1;height:44px;border:none;border-radius:10px;background:#1769e0;color:#fff;font-size:14px;font-weight:600;cursor:pointer;">허용</button>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(overlay);
+        overlay.querySelector("#ttsAllowBtn").addEventListener("click", () => {
           const u = new SpeechSynthesisUtterance("");
           u.volume = 0;
           try { window.speechSynthesis.speak(u); } catch {}
-          wrap.remove();
+          overlay.remove();
+        }, { once: true });
+        overlay.querySelector("#ttsDenyBtn").addEventListener("click", () => {
+          overlay.remove();
         }, { once: true });
       })();
 
