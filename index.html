@@ -78,12 +78,61 @@
         min-height: 100dvh;
         overflow: hidden;
         grid-template-columns: minmax(0, 1fr);
-        grid-template-rows: repeat(2, minmax(0, 1fr));
+        grid-template-rows:
+          minmax(0, calc(var(--mobile-map-split, 50%) - 12px))
+          24px
+          minmax(0, 1fr);
+      }
+
+      .app.view-map .map-list-resizer {
+        display: flex;
+        grid-row: 2;
+        align-items: center;
+        justify-content: center;
+        border: 0;
+        border-top: 1px solid var(--line);
+        border-bottom: 1px solid var(--line);
+        background: #f0f3f7;
+        cursor: grab;
+        touch-action: none;
+      }
+
+      .app.view-map .map-list-resizer::before {
+        width: 44px;
+        height: 4px;
+        border-radius: 999px;
+        background: #9aa9b8;
+        content: "";
+      }
+
+      .app.view-map .map-list-resizer:hover {
+        background: #e8edf3;
+        cursor: grabbing;
+      }
+
+      .app.view-map .map-list-resizer:hover::before {
+        background: #5b7a99;
+        width: 56px;
+      }
+
+      .app.view-map .map-list-resizer:active {
+        background: #e8ecf1;
+        cursor: grabbing;
+      }
+
+      .app.view-map .map-list-resizer:active::before {
+        background: #1769e0;
+        width: 56px;
+      }
+
+      .app.view-map .map-list-resizer:focus-visible {
+        outline: 3px solid rgba(23, 105, 224, 0.35);
+        outline-offset: -3px;
       }
 
       .app.view-map .sidebar {
         display: flex;
-        grid-row: 2;
+        grid-row: 3;
         min-height: 0;
         max-height: none;
         flex-direction: column;
@@ -131,6 +180,10 @@
 
       .map-list-resizer {
         display: none;
+      }
+
+      .app.view-map .map-wrap {
+        grid-row: 1;
       }
 
       .sidebar {
@@ -1142,45 +1195,8 @@
       }
 
       @media (max-width: 768px) {
-        .app.view-map {
-          grid-template-rows:
-            minmax(0, calc(var(--mobile-map-split, 50%) - 12px))
-            24px
-            minmax(0, 1fr);
-        }
-
         .app.view-map .map-wrap {
           grid-row: 1;
-        }
-
-        .app.view-map .map-list-resizer {
-          display: flex;
-          grid-row: 2;
-          align-items: center;
-          justify-content: center;
-          border: 0;
-          border-top: 1px solid var(--line);
-          border-bottom: 1px solid var(--line);
-          background: #f5f8fb;
-          cursor: row-resize;
-          touch-action: none;
-        }
-
-        .app.view-map .map-list-resizer::before {
-          width: 44px;
-          height: 4px;
-          border-radius: 999px;
-          background: #9aa9b8;
-          content: "";
-        }
-
-        .app.view-map .map-list-resizer:focus-visible {
-          outline: 3px solid rgba(23, 105, 224, 0.35);
-          outline-offset: -3px;
-        }
-
-        .app.view-map .sidebar {
-          grid-row: 3;
         }
       }
 
@@ -1689,6 +1705,47 @@
       }
 
       // ── STT ──────────────────────────────────────────────────
+      async function voiceAnnounceResults(displayRows, markers) {
+        const top = displayRows.slice(0, Math.min(5, displayRows.length));
+        if (!top.length) return;
+
+        const nameList = top.map(({ item }, i) => `${i + 1}번, ${item.name}`).join(". ");
+        await speak(`${nameList}. 어디로 가시겠어요?`);
+
+        const heard = await listenForVoice(7000);
+        if (!heard) return;
+
+        let idx = -1;
+
+        // 숫자로 선택
+        const digitMatch = heard.match(/(\d+)/);
+        if (digitMatch) {
+          idx = parseInt(digitMatch[1], 10) - 1;
+        }
+
+        // 한글 수사로 선택
+        if (idx < 0) {
+          const wordMap = { 첫: 0, 일: 0, 하나: 0, 두: 1, 이: 1, 둘: 1, 세: 2, 삼: 2, 셋: 2, 네: 3, 사: 3, 넷: 3, 다섯: 4, 오: 4 };
+          for (const [word, num] of Object.entries(wordMap)) {
+            if (heard.includes(word)) { idx = num; break; }
+          }
+        }
+
+        // 이름으로 선택
+        if (idx < 0) {
+          idx = top.findIndex(({ item }) =>
+            item.name && item.name.split(/\s+/).some((part) => part.length > 1 && heard.includes(part))
+          );
+        }
+
+        if (idx >= 0 && idx < top.length) {
+          const { item } = top[idx];
+          speak(`${item.name}으로 이동합니다.`);
+          setActiveView("map");
+          showParkingInfo(markers[idx], item);
+        }
+      }
+
       function listenForVoice(timeoutMs = 7000) {
         return new Promise((resolve) => {
           const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -2810,6 +2867,10 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
             createResultButton(item, parkingMarkers[index], reasons.get(item.managementNo), recommendationRank),
           );
         });
+
+        // 목적지 검색 결과일 때만 음성 안내
+        const hasDestination = displayRows.some(({ item }) => Number.isFinite(item.destinationDistanceM));
+        if (hasDestination) voiceAnnounceResults(displayRows, parkingMarkers);
 
         const center = averagePosition(displayRows.map((row) => row.position));
         latestMapBounds = bounds;
