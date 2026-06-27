@@ -3274,29 +3274,33 @@ if (destinationMarker) { destinationMarker.setMap(null); destinationMarker = nul
       initVoiceInput();
       initDebugSlotToggle();
 
-      // 첫 사용자 제스처 시 TTS 언락 + 마이크 권한 사전 요청
-      // iOS/Android는 user gesture 없이 speechSynthesis.speak()를 막으므로
-      // 첫 탭/클릭 때 무음 발화로 오디오 컨텍스트를 활성화해두면
-      // 이후 자동 TTS(알림 클릭 → 경로 변경 안내)가 버튼 없이도 재생됨
-      (function primeAudioAndMic() {
-        let primed = false;
-        const prime = async () => {
-          if (primed) return;
-          primed = true;
-          if (window.speechSynthesis) {
-            const u = new SpeechSynthesisUtterance("");
-            u.volume = 0;
-            try { window.speechSynthesis.speak(u); } catch {}
+      // 마이크 권한 즉시 요청 (로드 즉시 브라우저 권한 다이얼로그 표시)
+      (async function () {
+        try {
+          if (navigator.mediaDevices?.getUserMedia) {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            stream.getTracks().forEach((t) => t.stop());
           }
-          try {
-            if (navigator.mediaDevices?.getUserMedia) {
-              const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-              stream.getTracks().forEach((t) => t.stop());
-            }
-          } catch {}
-        };
-        document.addEventListener("touchstart", prime, { once: true, passive: true });
-        document.addEventListener("click", prime, { once: true });
+        } catch {}
+      })();
+
+      // TTS 활성화 배너: iOS/Android는 user gesture 없이 speak() 불가
+      // 앱 접속 즉시 눈에 띄는 버튼을 표시 → 탭 한 번으로 오디오 컨텍스트 언락
+      (function initTtsActivation() {
+        if (!window.speechSynthesis) return;
+        const wrap = document.createElement("div");
+        wrap.style.cssText = "position:fixed;bottom:80px;left:0;right:0;z-index:9998;display:flex;justify-content:center;pointer-events:none;";
+        const btn = document.createElement("button");
+        btn.style.cssText = "background:#1769e0;color:#fff;border:none;padding:12px 24px;border-radius:999px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.3);pointer-events:auto;height:auto;";
+        btn.textContent = "🔊 탭하여 음성 안내 켜기";
+        wrap.appendChild(btn);
+        document.body.appendChild(wrap);
+        btn.addEventListener("click", () => {
+          const u = new SpeechSynthesisUtterance("");
+          u.volume = 0;
+          try { window.speechSynthesis.speak(u); } catch {}
+          wrap.remove();
+        }, { once: true });
       })();
 
       registerParkingServiceWorker().catch((error) => {
