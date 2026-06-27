@@ -1212,6 +1212,8 @@
       const geocodeCache = new Map();
       let destinationMarker = null;
       let lastDestination = null;
+      let lastRecommendationReasons = new Map();
+      let lastRecommendationPreference = "balanced";
       let visibleParkingRows = [];
       let serviceWorkerRegistration = null;
       let pushConfigPromise = null;
@@ -1722,6 +1724,8 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
           const top3 = within1500.slice(0, 3);
           searchFeedbackEl.textContent = `${destination.name} 기준 추천 이유를 생성하는 중입니다.`;
           const reasons = await fetchParkingReasons(destination.name, top3);
+          lastRecommendationReasons = reasons;
+          lastRecommendationPreference = parsed.preference;
           await renderParkingRows(top3, reasons);
           if (destinationMarker) destinationMarker.setMap(null);
           destinationMarker = new kakao.maps.Marker({
@@ -2098,7 +2102,14 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
           lastRealtimeChangeSummary = changes.summary;
           rememberRealtimeRows(refreshedRows);
           allParkingRows = refreshedRows;
-          await renderParkingRows(refreshedRows);
+          if (lastDestination) {
+            const ranked = rankedParkingRows(allParkingRows, lastDestination, lastRecommendationPreference);
+            const within1500 = ranked.filter((lot) => Number.isFinite(lot.destinationDistanceM) && lot.destinationDistanceM <= 1500);
+            const refreshedTop = (within1500.length ? within1500 : ranked).slice(0, 3);
+            await renderParkingRows(refreshedTop, lastRecommendationReasons);
+          } else {
+            await renderParkingRows(refreshedRows);
+          }
           renderSummary(payload);
           nextRealtimeRefreshAt = new Date(
             Date.now() + REALTIME_REFRESH_INTERVAL_MS,
