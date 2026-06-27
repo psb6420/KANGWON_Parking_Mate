@@ -1,4 +1,5 @@
 .vercel
+node_modules/
 .env
 backend/.env
 backend/*.db
@@ -7,5 +8,6 @@ backend/*.db-wal
 backend/node_modules/
 parking-cache.json
 reasons-cache.json
+push-debug.json
 __pycache__/
 *.pyc

@@ -13,6 +13,7 @@
 - 추천 순위 카드와 `1`, `2`, `3` 지도 마커 표시
 - 모바일 홈/지도 탭과 지도·목록 높이 조절 및 독립 스크롤
 - 좌표가 있는 모든 주차장을 카카오내비 앱에 전달하는 길찾기
+- 길찾기 중 추천 주차장 잔여면 변경 Web Push 알림
 - Arduino 센서 기반 주차면 상태 수집
 - SSE(Server-Sent Events)를 통한 실시간 주차 상태 스트리밍
 - Gemini API를 이용한 자연어 추천 이유 생성
@@ -107,6 +108,22 @@ npm start
 
 일반 목록과 추천 목록의 `길찾기` 버튼은 주차장 이름과 WGS84 경도/위도를 전달합니다. 모바일에서는 `Kakao.Navi.start()`로 카카오내비 앱을 실행하고, 앱이 설치돼 있지 않으면 설치 페이지로 이동합니다. 카카오내비 실행을 지원하지 않는 PC에서는 같은 목적지의 카카오맵 웹 길찾기를 새 탭으로 엽니다. 웹앱 내부에서 직접 턴바이턴 길 안내를 제공하는 방식은 아닙니다.
 
+모바일에서 `길찾기`를 누르면 현재 추천 목록 상위 3곳을 최대 2시간 동안 감시합니다. Express 백엔드는 브라우저와 독립적으로 1분마다 강릉시 `getParkRltm`과 Arduino 주차면을 확인하고 다음 변경이 생길 때 Web Push를 보냅니다.
+
+- 잔여면이 `1 이상 -> 0`이면 만차 알림
+- 잔여면이 `0 -> 1 이상`이면 빈자리 발생 알림
+- 그 외 변경은 이전 잔여면과 현재 잔여면 알림
+- 여러 추천 주차장이 동시에 바뀌면 한 알림으로 묶어서 발송
+- 새 길찾기를 시작하면 이전 감시는 현재 추천 목록으로 교체
+
+Web Push는 Service Worker가 수신하므로 카카오내비가 전면에 있거나 Parking Mate 페이지가 닫혀 있어도 서버가 실행 중이면 알림을 받을 수 있습니다. 단, 다음 모바일 조건이 필요합니다.
+
+- 서비스 주소는 `HTTPS`여야 합니다. PC의 `http://192.168.x.x:8080` LAN 주소에서는 모바일 Web Push를 사용할 수 없습니다.
+- Android는 Chrome에서 알림 권한을 허용해야 합니다.
+- iPhone/iPad는 iOS/iPadOS 16.4 이상에서 사이트를 홈 화면에 추가한 뒤 웹앱으로 열어야 합니다.
+- 사용자가 최초 1회 알림 권한을 허용해야 합니다.
+- 배포 환경에서는 프론트의 `PARKING_BACKEND_ORIGIN`을 장시간 실행되는 Express/Railway HTTPS 주소로 설정해야 합니다. Vercel Serverless 함수만으로는 1분 백그라운드 타이머를 유지할 수 없습니다.
+
 ## ESP32 A1 센서 브릿지 실행
 
 강원대학교 주차장6의 A1 칸은 ESP32/FastAPI 브릿지와 연결됩니다. ESP32는 FastAPI 브릿지로 `spotId/status` 값을 보내고, 브릿지는 값을 `KNU_PARKING_6_A1`로 변환해 Express 백엔드의 `/api/parking/status`로 전달합니다. Express 백엔드는 SQLite DB에 저장하고, 웹 화면은 DB 값을 1초마다 읽어 A1 색상을 갱신합니다.
@@ -155,6 +172,11 @@ KAKAO_REST_API_KEY=your_kakao_rest_key_here
 KAKAO_JAVASCRIPT_KEY=your_kakao_js_key_here
 GEMINI_API_KEY=your_gemini_api_key_here
 DB_PATH=
+PARKING_BACKEND_ORIGIN=https://your-backend.example.com
+VAPID_PUBLIC_KEY=your_public_vapid_key
+VAPID_PRIVATE_KEY=your_private_vapid_key
+VAPID_SUBJECT=mailto:your-email@example.com
+PUSH_MONITOR_INTERVAL_MS=60000
 ```
 
 주의: 실제 API 키는 GitHub에 커밋하지 않습니다. `backend/.env`는 `.gitignore`에 포함되어 있습니다.
@@ -190,6 +212,9 @@ DB_PATH=
 | `GET` | `/api/destinations/search` | 목적지 검색 |
 | `GET` | `/api/destinations/popular` | 인기 목적지 조회 |
 | `GET` | `/api/destinations/events` | 지역 행사 조회 |
+| `GET` | `/api/push/config` | Web Push 공개키와 감시 설정 조회 |
+| `POST` | `/api/push/watch` | 현재 추천 주차장 감시 시작 또는 교체 |
+| `DELETE` | `/api/push/watch/:watchId` | 추천 주차장 감시 중지 |
 
 ## 추천 로직
 

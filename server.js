@@ -30,6 +30,8 @@ const MIME = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
+  ".svg": "image/svg+xml",
+  ".webmanifest": "application/manifest+json; charset=utf-8",
 };
 
 const CACHE_FILE = path.join(__dirname, "parking-cache.json");
@@ -127,7 +129,12 @@ function serveFile(reqUrl, res) {
       return;
     }
     const ext = path.extname(requested).toLowerCase();
-    send(res, 200, data, { "content-type": MIME[ext] || "application/octet-stream" });
+    const headers = { "content-type": MIME[ext] || "application/octet-stream" };
+    if (pathname === "/sw.js") {
+      headers["cache-control"] = "no-cache";
+      headers["service-worker-allowed"] = "/";
+    }
+    send(res, 200, data, headers);
   });
 }
 
@@ -356,9 +363,9 @@ function buildMarkerRows(infoRows, realtimeRows, realtimeChangeById = new Map())
       lng: isFiniteKoreaCoordinate(info.yCrdn, info.xCrdn) ? Number(info.xCrdn) : null,
       needsGeocode: !isFiniteKoreaCoordinate(info.yCrdn, info.xCrdn),
       coordinateSource: isFiniteKoreaCoordinate(info.yCrdn, info.xCrdn) ? "getParkInfo" : "address",
-      total: String(realtime.totalLots || ""),
-      realtimeTotal: String(realtime.totalLots || ""),
-      realtimeAvailable: String(realtime.availLots || ""),
+      total: String(realtime.totalLots ?? ""),
+      realtimeTotal: String(realtime.totalLots ?? ""),
+      realtimeAvailable: String(realtime.availLots ?? ""),
       realtimeChange: realtimeChangeById.get(id) || null,
       sourceEntries: [
         {
@@ -367,8 +374,8 @@ function buildMarkerRows(infoRows, realtimeRows, realtimeChangeById = new Map())
           sourceId: id,
           name: info.prkName || realtime.prkName || id,
           address,
-          available: realtime.availLots || "",
-          total: realtime.totalLots || "",
+          available: realtime.availLots ?? "",
+          total: realtime.totalLots ?? "",
           realtimeChange: realtimeChangeById.get(id) || null,
           raw: {
             getParkInfo: info,
@@ -536,6 +543,7 @@ function proxyClientConfig(res) {
     kakaoJavascriptKey: cleanSecret(process.env.KAKAO_JAVASCRIPT_KEY),
     hasDataServiceKey: Boolean(cleanSecret(process.env.DATA_GO_KR_SERVICE_KEY)),
     hasGeminiKey: Boolean(cleanSecret(process.env.GEMINI_API_KEY)),
+    parkingBackendOrigin: cleanSecret(process.env.PARKING_BACKEND_ORIGIN),
   });
 }
 

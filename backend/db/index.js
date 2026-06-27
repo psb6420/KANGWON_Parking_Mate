@@ -108,6 +108,38 @@ function initSchema(db) {
       end_date        TEXT,
       fetched_at      TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    -- Web Push subscriptions. The endpoint is a browser-issued secret URL.
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      endpoint         TEXT PRIMARY KEY,
+      p256dh           TEXT NOT NULL,
+      auth             TEXT NOT NULL,
+      created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- A navigation watch expires automatically so abandoned trips do not poll forever.
+    CREATE TABLE IF NOT EXISTS parking_watch_sessions (
+      watch_id         TEXT PRIMARY KEY,
+      endpoint         TEXT NOT NULL,
+      destination_name TEXT,
+      created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+      expires_at       TEXT NOT NULL,
+      FOREIGN KEY (endpoint) REFERENCES push_subscriptions(endpoint) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS parking_watch_lots (
+      watch_id         TEXT NOT NULL,
+      management_no    TEXT NOT NULL,
+      name             TEXT NOT NULL,
+      last_available   INTEGER,
+      total_spots      INTEGER,
+      PRIMARY KEY (watch_id, management_no),
+      FOREIGN KEY (watch_id) REFERENCES parking_watch_sessions(watch_id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_parking_watch_expires
+      ON parking_watch_sessions(expires_at);
   `);
   seedDefaultArduinoLots(db);
 }

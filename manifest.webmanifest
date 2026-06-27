@@ -1,0 +1,11 @@
+{
+  "name": "강원 Parking Mate",
+  "short_name": "Parking Mate",
+  "lang": "ko",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#eef3f8",
+  "theme_color": "#1769e0",
+  "description": "추천 주차장의 실시간 잔여면을 확인하고 길찾기 중 변경 알림을 받습니다."
+}

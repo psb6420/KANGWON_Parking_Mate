@@ -3,6 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#1769e0" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <title>Gangwon-do Real-Time Parking Map</title>
     <style>
       :root {
@@ -89,13 +93,18 @@
         border-right: 0;
       }
 
-      .app.view-map .sidebar > :not(.section-title):not(.results) {
+      .app.view-map .sidebar > :not(.section-title):not(.results):not(.push-watch-status) {
         display: none;
       }
 
       .app.view-map .section-title {
         flex: 0 0 auto;
         margin: 0 2px 10px;
+      }
+
+      .app.view-map .push-watch-status {
+        flex: 0 0 auto;
+        margin: 0 2px 8px;
       }
 
       .app.view-map .results {
@@ -237,7 +246,7 @@
         display: grid;
         gap: 10px;
         margin-top: 12px;
-        padding: 12px;
+        padding: 10px;
         border: 1px solid var(--line);
         border-radius: 8px;
         background: #f8fafc;
@@ -283,88 +292,259 @@
         background: #d94141;
       }
 
-      .slot-board {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 7px;
+      .slot-dot.sensor {
+        background: #2563eb;
       }
 
       .slot-site-map {
-        display: grid;
-        grid-template-columns: minmax(84px, 0.65fr) minmax(0, 2.4fr) minmax(84px, 0.65fr);
-        grid-template-areas:
-          "left board right"
-          "bottom bottom bottom";
-        gap: 8px;
-        align-items: stretch;
+        position: relative;
+        height: 390px;
+        overflow: hidden;
+        border: 1px solid #34404a;
+        border-radius: 8px;
+        background:
+          linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+          linear-gradient(0deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+          #182126;
+        background-size: 24px 24px;
+        box-shadow: inset 0 0 42px rgba(0, 0, 0, 0.38);
       }
 
       .site-label {
+        position: absolute;
+        z-index: 2;
         display: grid;
-        min-height: 42px;
         place-items: center;
-        border: 1px dashed #c9d4e5;
-        border-radius: 7px;
-        background: #fff;
-        color: #42526a;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: rgba(255, 255, 255, 0.08);
+        color: #edf4f7;
         font-size: 11px;
         font-weight: 800;
-        line-height: 1.25;
         text-align: center;
       }
 
-      .site-label.left {
-        grid-area: left;
+      .site-label.top,
+      .site-label.bottom {
+        left: 44px;
+        right: 44px;
+        height: 34px;
       }
 
-      .site-label.right {
-        grid-area: right;
+      .site-label.top {
+        top: 0;
+        border-radius: 0 0 8px 8px;
       }
 
       .site-label.bottom {
-        grid-area: bottom;
-        min-height: 34px;
+        bottom: 0;
+        border-radius: 8px 8px 0 0;
       }
 
-      .slot-board-wrap {
-        grid-area: board;
-        min-width: 0;
+      .site-label.left,
+      .site-label.right {
+        top: 44px;
+        bottom: 44px;
+        width: 36px;
+        padding: 5px;
+        writing-mode: vertical-rl;
+        text-orientation: upright;
+      }
+
+      .site-label.left {
+        left: 0;
+        border-radius: 0 8px 8px 0;
+      }
+
+      .site-label.right {
+        right: 0;
+        border-radius: 8px 0 0 8px;
+      }
+
+      .slot-lot-area {
+        position: absolute;
+        inset: 44px 42px;
+        z-index: 1;
+        display: grid;
+        grid-template-rows: 1fr 28px 1fr 28px 1fr;
+        gap: 6px;
+      }
+
+      .slot-row {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 5px;
+      }
+
+      .slot-driving-lane {
+        position: relative;
+        display: grid;
+        place-items: center;
+      }
+
+      .slot-driving-lane::before {
+        content: "";
+        position: absolute;
+        left: 2px;
+        right: 2px;
+        height: 2px;
+        background: repeating-linear-gradient(
+          90deg,
+          rgba(255, 255, 255, 0.38) 0 22px,
+          transparent 22px 34px
+        );
+      }
+
+      .slot-lane-arrow {
+        position: relative;
+        width: 54px;
+        height: 16px;
+      }
+
+      .slot-lane-arrow::before {
+        content: "";
+        position: absolute;
+        top: 7px;
+        left: 0;
+        right: 12px;
+        height: 3px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.86);
+      }
+
+      .slot-lane-arrow::after {
+        content: "";
+        position: absolute;
+        top: 2px;
+        right: 0;
+        border-top: 7px solid transparent;
+        border-bottom: 7px solid transparent;
+        border-left: 13px solid rgba(255, 255, 255, 0.86);
+      }
+
+      .slot-driving-lane.reverse .slot-lane-arrow {
+        transform: rotate(180deg);
       }
 
       .slot-cell {
-        display: grid;
-        min-height: 58px;
-        place-items: center;
-        border: 1px solid transparent;
+        position: relative;
+        display: flex;
+        min-width: 0;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        border: 2px solid rgba(134, 239, 172, 0.68);
         border-radius: 7px;
+        background: rgba(12, 42, 32, 0.88);
         color: #fff;
-        font-size: 12px;
-        line-height: 1.25;
+        font: inherit;
         text-align: center;
+        box-shadow: inset 0 0 18px rgba(25, 195, 125, 0.12);
+      }
+
+      .slot-cell::before {
+        content: "";
+        position: absolute;
+        inset: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.66);
+        border-radius: 4px;
       }
 
       .slot-cell strong {
+        position: relative;
+        z-index: 1;
         display: block;
-        font-size: 14px;
+        color: #9af1bd;
+        font-size: 13px;
+        line-height: 1;
       }
 
-      .slot-cell span {
-        display: block;
-        font-size: 10px;
+      .slot-car {
+        position: relative;
+        z-index: 1;
+        width: 16px;
+        height: 28px;
+        margin: 4px 0;
+        border: 1px solid rgba(154, 241, 189, 0.75);
+        border-radius: 6px 6px 4px 4px;
+        background: rgba(25, 195, 125, 0.3);
       }
 
-      .slot-cell.available {
-        border-color: rgba(25, 164, 99, 0.36);
-        background: #19a463;
+      .slot-car::before,
+      .slot-car::after {
+        content: "";
+        position: absolute;
+        left: 3px;
+        right: 3px;
+        height: 6px;
+        border-radius: 3px;
+        background: rgba(255, 255, 255, 0.28);
+      }
+
+      .slot-car::before {
+        top: 4px;
+      }
+
+      .slot-car::after {
+        bottom: 4px;
+      }
+
+      .slot-status {
+        position: relative;
+        z-index: 1;
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        color: #bcf7d2;
+        font-size: 8px;
+        font-weight: 800;
+        white-space: nowrap;
       }
 
       .slot-cell.occupied {
-        border-color: rgba(217, 65, 65, 0.36);
-        background: #d94141;
+        border-color: rgba(248, 113, 113, 0.86);
+        background: rgba(54, 24, 27, 0.9);
+        box-shadow: inset 0 0 18px rgba(239, 68, 68, 0.16);
+      }
+
+      .slot-cell.occupied strong {
+        color: #ff9c9c;
+      }
+
+      .slot-cell.occupied .slot-car {
+        border-color: rgba(255, 156, 156, 0.8);
+        background: rgba(239, 68, 68, 0.38);
+      }
+
+      .slot-cell.occupied .slot-status {
+        color: #ffd0d0;
       }
 
       .slot-cell.sensor {
-        box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.85);
+        box-shadow:
+          0 0 0 2px rgba(37, 99, 235, 0.86),
+          0 0 16px rgba(37, 99, 235, 0.5),
+          inset 0 0 18px rgba(25, 195, 125, 0.12);
+      }
+
+      .slot-cell.sensor.occupied {
+        box-shadow:
+          0 0 0 2px rgba(37, 99, 235, 0.86),
+          0 0 16px rgba(37, 99, 235, 0.5),
+          inset 0 0 18px rgba(239, 68, 68, 0.16);
+      }
+
+      .slot-sensor-badge {
+        position: absolute;
+        z-index: 2;
+        right: 3px;
+        bottom: 3px;
+        padding: 2px 4px;
+        border-radius: 3px;
+        background: #2563eb;
+        color: #fff;
+        font-size: 7px;
+        font-weight: 800;
       }
 
 
@@ -613,6 +793,44 @@
         opacity: 0.65;
       }
 
+      .push-watch-status {
+        display: flex;
+        min-height: 38px;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin: 8px 0;
+        padding: 8px 10px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--panel-soft);
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .push-watch-status.is-active {
+        border-color: #9bd8bd;
+        background: #edf9f3;
+        color: #0f7043;
+      }
+
+      .push-watch-stop {
+        flex: 0 0 auto;
+        min-height: 30px;
+        padding: 5px 9px;
+        border: 1px solid currentColor;
+        border-radius: 6px;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        font-weight: 750;
+      }
+
+      .push-watch-stop[hidden] {
+        display: none;
+      }
+
       .result-item:hover {
         border-color: var(--line-strong);
         transform: translateY(-1px);
@@ -734,6 +952,8 @@
         bottom: 16px;
         z-index: 3;
         width: min(380px, calc(100% - 32px));
+        max-height: calc(100% - 32px);
+        overflow-y: auto;
         padding: 16px;
         border: 1px solid var(--line);
         border-radius: 8px;
@@ -908,6 +1128,10 @@
             <span style="font-size:12px;color:#888">주차장을 누르면 지도에서 확인할 수 있어요</span>
           </div>
         </div>
+        <div class="push-watch-status" id="pushWatchStatus" role="status">
+          <span id="pushWatchStatusText">길찾기를 누르면 추천 목록의 잔여면 알림을 시작합니다.</span>
+          <button class="push-watch-stop" type="button" id="stopPushWatchButton" hidden>알림 중지</button>
+        </div>
         <section class="results" id="results" aria-live="polite"></section>
       </aside>
 
@@ -952,7 +1176,7 @@
     <script>
       const DEFAULT_POSITION = { lat: 37.8228, lng: 128.1555 };
       const REALTIME_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
-      const ARDUINO_BACKEND_ORIGIN = `${window.location.protocol}//${window.location.hostname}:3001`;
+      let parkingBackendOrigin = `${window.location.protocol}//${window.location.hostname}:3001`;
       const KNU_PARKING_LOT_ID = "KNU_PARKING_6";
       const VIRTUAL_SLOT_COUNT = 12;
       const KAKAO_JS_SDK_URL = "https://t1.kakaocdn.net/kakao_js_sdk/2.8.1/kakao.min.js";
@@ -983,6 +1207,11 @@
       const geocodeCache = new Map();
       let destinationMarker = null;
       let lastDestination = null;
+      let visibleParkingRows = [];
+      let serviceWorkerRegistration = null;
+      let pushConfigPromise = null;
+      let activePushWatchId = window.localStorage.getItem("parkingMatePushWatchId") || "";
+      let activePushWatchExpiresAt = window.localStorage.getItem("parkingMatePushWatchExpiresAt") || "";
 
       function makeMarkerImage(color, label = "") {
         const w = 32, h = 40;
@@ -1025,6 +1254,9 @@
       const metricRefreshEl = document.querySelector("#metricRefresh");
       const parkingPanelEl = document.querySelector("#parkingPanel");
       const mapListResizerEl = document.querySelector("#mapListResizer");
+      const pushWatchStatusEl = document.querySelector("#pushWatchStatus");
+      const pushWatchStatusTextEl = document.querySelector("#pushWatchStatusText");
+      const stopPushWatchButton = document.querySelector("#stopPushWatchButton");
       const tabButtons = [...document.querySelectorAll(".tab-button")];
       let clientKakaoKey = "";
       let latestMapBounds = null;
@@ -1032,6 +1264,143 @@
 
       function setStatus(message) {
         statusEl.textContent = message;
+      }
+
+      function updatePushWatchStatus(message = "") {
+        const expiry = activePushWatchExpiresAt ? new Date(activePushWatchExpiresAt) : null;
+        const isActive = Boolean(
+          activePushWatchId && expiry && !Number.isNaN(expiry.getTime()) && expiry.getTime() > Date.now(),
+        );
+        if (!isActive && activePushWatchId) {
+          activePushWatchId = "";
+          activePushWatchExpiresAt = "";
+          window.localStorage.removeItem("parkingMatePushWatchId");
+          window.localStorage.removeItem("parkingMatePushWatchExpiresAt");
+        }
+        pushWatchStatusEl.classList.toggle("is-active", isActive);
+        stopPushWatchButton.hidden = !isActive;
+        if (message) {
+          pushWatchStatusTextEl.textContent = message;
+        } else if (isActive) {
+          pushWatchStatusTextEl.textContent = `추천 주차장 감시 중 · ${expiry.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}까지`;
+        }
+      }
+
+      function urlBase64ToUint8Array(value) {
+        const padding = "=".repeat((4 - (value.length % 4)) % 4);
+        const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
+        const raw = window.atob(base64);
+        return Uint8Array.from([...raw].map((character) => character.charCodeAt(0)));
+      }
+
+      async function registerParkingServiceWorker() {
+        if (!("serviceWorker" in navigator)) {
+          throw new Error("이 브라우저는 백그라운드 알림을 지원하지 않습니다.");
+        }
+        if (!window.isSecureContext) {
+          throw new Error("모바일 알림은 HTTPS 주소에서만 사용할 수 있습니다.");
+        }
+        if (!serviceWorkerRegistration) {
+          serviceWorkerRegistration = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+        }
+        return navigator.serviceWorker.ready;
+      }
+
+      function loadPushConfig() {
+        if (!pushConfigPromise) {
+          pushConfigPromise = fetch(`${parkingBackendOrigin}/api/push/config`)
+            .then(async (response) => {
+              const payload = await response.json().catch(() => ({}));
+              if (!response.ok || !payload.enabled || !payload.publicKey) {
+                throw new Error(payload.error || "푸시 알림 서버가 설정되지 않았습니다.");
+              }
+              return payload;
+            })
+            .catch((error) => {
+              pushConfigPromise = null;
+              throw error;
+            });
+        }
+        return pushConfigPromise;
+      }
+
+      function watchedRecommendationRows(navigatedItem) {
+        const recommendations = visibleParkingRows
+          .filter((row) => Number.isFinite(row.destinationDistanceM))
+          .slice(0, 3);
+        const rows = recommendations.length ? recommendations : [navigatedItem];
+        return rows.map((row) => ({
+          managementNo: row.managementNo,
+          name: row.name || "주차장",
+          available: parseNumberOrNull(row.realtimeAvailable),
+          total: parseNumberOrNull(row.realtimeTotal || row.total),
+        }));
+      }
+
+      async function startRecommendationPushWatch(navigatedItem) {
+        if (!("Notification" in window) || !("PushManager" in window)) {
+          throw new Error("이 모바일 브라우저는 푸시 알림을 지원하지 않습니다.");
+        }
+        if (!window.isSecureContext) {
+          throw new Error("모바일 푸시 알림은 HTTPS 주소가 필요합니다.");
+        }
+
+        const permission = Notification.permission === "default"
+          ? await Notification.requestPermission()
+          : Notification.permission;
+        if (permission !== "granted") {
+          throw new Error("알림 권한이 허용되지 않았습니다.");
+        }
+
+        await loadClientConfig();
+        const [registration, config] = await Promise.all([
+          registerParkingServiceWorker(),
+          loadPushConfig(),
+        ]);
+        let subscription = await registration.pushManager.getSubscription();
+        if (!subscription) {
+          subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(config.publicKey),
+          });
+        }
+
+        const lots = watchedRecommendationRows(navigatedItem);
+        const response = await fetch(`${parkingBackendOrigin}/api/push/watch`, {
+          method: "POST",
+          keepalive: true,
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            subscription: subscription.toJSON(),
+            lots,
+            destinationName: lastDestination?.name || navigatedItem.name || "",
+            durationMinutes: 120,
+          }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || "주차장 알림을 시작하지 못했습니다.");
+
+        activePushWatchId = payload.watchId;
+        activePushWatchExpiresAt = payload.expiresAt;
+        window.localStorage.setItem("parkingMatePushWatchId", activePushWatchId);
+        window.localStorage.setItem("parkingMatePushWatchExpiresAt", activePushWatchExpiresAt);
+        updatePushWatchStatus(`${lots.length}곳 잔여면 감시 중 · 변경 시 푸시 알림`);
+        return lots.length;
+      }
+
+      async function stopRecommendationPushWatch() {
+        const watchId = activePushWatchId;
+        activePushWatchId = "";
+        activePushWatchExpiresAt = "";
+        window.localStorage.removeItem("parkingMatePushWatchId");
+        window.localStorage.removeItem("parkingMatePushWatchExpiresAt");
+        updatePushWatchStatus("추천 주차장 알림을 중지했습니다.");
+        if (!watchId) return;
+        try {
+          await fetch(`${parkingBackendOrigin}/api/push/watch/${encodeURIComponent(watchId)}`, {
+            method: "DELETE",
+          });
+        } catch {}
       }
 
       function setMobileMapSplit(percent) {
@@ -1168,7 +1537,7 @@
 
       async function refreshArduinoLotState(lotId) {
         try {
-          const response = await fetch(`${ARDUINO_BACKEND_ORIGIN}/api/arduino/slots/${encodeURIComponent(lotId)}`);
+          const response = await fetch(`${parkingBackendOrigin}/api/arduino/slots/${encodeURIComponent(lotId)}`);
           if (!response.ok) throw new Error(`Arduino backend ${response.status}`);
           const payload = await response.json();
           arduinoSlotsByLot.set(lotId, normalizeArduinoSlots(payload));
@@ -1207,7 +1576,7 @@
           const card = document.querySelector(`.result-item[data-management-no="${updatedRow.managementNo}"]`);
           const slotSpan = card?.querySelector("[data-slot-display]");
           if (slotSpan) {
-            slotSpan.textContent = `여유 ${updatedRow.realtimeAvailable || "-"} / 총 ${updatedRow.realtimeTotal || updatedRow.total || "-"}면 ${formatItemDelta(updatedRow)}`;
+            slotSpan.textContent = `여유 ${formatParkingValue(updatedRow.realtimeAvailable)} / 총 ${formatParkingValue(updatedRow.realtimeTotal || updatedRow.total)}면 ${formatItemDelta(updatedRow)}`;
             card.style.borderLeftColor = parkingMarkerColor(updatedRow);
           }
         }
@@ -1221,7 +1590,7 @@
       function startArduinoStatusStream() {
         if (arduinoStatusSource) return;
         try {
-          arduinoStatusSource = new EventSource(`${ARDUINO_BACKEND_ORIGIN}/api/parking/status/live`);
+          arduinoStatusSource = new EventSource(`${parkingBackendOrigin}/api/parking/status/live`);
           arduinoStatusSource.onmessage = (event) => {
             try {
               applyArduinoUpdate(JSON.parse(event.data));
@@ -1423,6 +1792,8 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
           .then((config) => {
             const kakaoKey = String(config.kakaoJavascriptKey || "").trim();
             if (kakaoKey) clientKakaoKey = kakaoKey;
+            const backendOrigin = String(config.parkingBackendOrigin || "").trim();
+            if (backendOrigin) parkingBackendOrigin = backendOrigin.replace(/\/$/, "");
           })
           .catch(() => {});
         return clientConfigLoadingPromise;
@@ -1532,7 +1903,15 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
         const originalContent = button.innerHTML;
         button.disabled = true;
         button.textContent = "카카오내비 연결 중";
+        let watchedLotCount = 0;
+        let pushError = "";
         try {
+          try {
+            watchedLotCount = await startRecommendationPushWatch(item);
+          } catch (error) {
+            pushError = error.message;
+            updatePushWatchStatus(pushError);
+          }
           const destination = {
             name: destinationName,
             x: lng,
@@ -1544,7 +1923,11 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
             : await loadKakaoNaviSdk();
           window.__parkingDebug.lastNaviRequest = destination;
           KakaoSdk.Navi.start(destination);
-          setStatus(`${destination.name}으로 카카오내비 길안내를 시작합니다.`);
+          setStatus(
+            watchedLotCount
+              ? `${destination.name}으로 길안내를 시작하고 추천 ${watchedLotCount}곳의 잔여면을 감시합니다.`
+              : `${destination.name}으로 카카오내비 길안내를 시작합니다. 알림: ${pushError}`,
+          );
         } catch (error) {
           setStatus(`카카오내비를 실행하지 못했습니다. ${error.message}`);
         } finally {
@@ -1746,6 +2129,7 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
       async function renderParkingRows(rows, reasons = new Map()) {
         clearParkingMarkers();
         resultsEl.innerHTML = "";
+        visibleParkingRows = [];
         lastRenderedMarkerCount = rows.length;
         window.__parkingDebug.positions = [];
 
@@ -1766,6 +2150,7 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
         }
 
         const displayRows = spreadOverlappingPositions(resolvedRows);
+        visibleParkingRows = displayRows.map(({ item }) => item);
         for (let index = 0; index < displayRows.length; index += 1) {
           const { item, position } = displayRows[index];
           const recommendationRank = Number.isFinite(item.destinationDistanceM) ? index + 1 : null;
@@ -1943,7 +2328,7 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
             <strong>${escapeHtml(item.name || "주차장")}</strong>
           </span>
           ${congestionBadge(item)}
-          <span data-slot-display>여유 ${escapeHtml(item.realtimeAvailable || "-")} / 총 ${escapeHtml(item.realtimeTotal || item.total || "-")}면 ${escapeHtml(formatItemDelta(item))}</span>
+          <span data-slot-display>여유 ${escapeHtml(formatParkingValue(item.realtimeAvailable))} / 총 ${escapeHtml(formatParkingValue(item.realtimeTotal || item.total))}면 ${escapeHtml(formatItemDelta(item))}</span>
           ${distanceText ? `<span>목적지까지 ${escapeHtml(distanceText)} · AI 기준: ${escapeHtml(preferenceLabel(item.recommendationPreference))}</span>` : ""}
           <span>${escapeHtml(item.address || "주소 없음")}</span>
           ${operationText ? `<span>${escapeHtml(operationText)}</span>` : ""}
@@ -2025,22 +2410,26 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
       function renderArduinoSlotBoard(item) {
         if (!item?.arduinoLotId) return "";
         const slots = item.arduinoSlots || defaultVirtualSlots();
-        const cells = slots
-          .map((slot) => {
+        const renderSlot = (slot) => {
             const statusClass = slot.isOccupied ? "occupied" : "available";
             const statusText = slot.isOccupied ? "주차 중" : "비어 있음";
-            const sensorText = slot.isSensorLinked ? "Arduino" : "가상";
             return `
-              <div class="slot-cell ${statusClass}${slot.isSensorLinked ? " sensor" : ""}" data-slot="${escapeHtml(slot.label)}">
-                <div>
-                  <strong>${escapeHtml(slot.label)}</strong>
-                  <span>${escapeHtml(statusText)}</span>
-                  <span>${escapeHtml(sensorText)}</span>
-                </div>
+              <div
+                class="slot-cell ${statusClass}${slot.isSensorLinked ? " sensor" : ""}"
+                data-slot="${escapeHtml(slot.label)}"
+                role="img"
+                aria-label="${escapeHtml(`${slot.label} ${statusText}${slot.isSensorLinked ? ", Arduino 센서 연결" : ""}`)}"
+              >
+                <strong>${escapeHtml(slot.label)}</strong>
+                <span class="slot-car" aria-hidden="true"></span>
+                <span class="slot-status"><i class="slot-dot ${statusClass}"></i>${escapeHtml(statusText)}</span>
+                ${slot.isSensorLinked ? '<span class="slot-sensor-badge">Arduino</span>' : ""}
               </div>
             `;
-          })
-          .join("");
+          };
+        const slotRows = [0, 4, 8].map((start) =>
+          `<div class="slot-row">${slots.slice(start, start + 4).map(renderSlot).join("")}</div>`,
+        );
 
         return `
           <section class="slot-panel" aria-label="강원대학교 주차장6 주차면">
@@ -2052,23 +2441,29 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
               <div class="slot-legend" aria-label="주차면 상태 범례">
                 <span><i class="slot-dot available"></i>비어 있음</span>
                 <span><i class="slot-dot occupied"></i>주차 중</span>
+                <span><i class="slot-dot sensor"></i>센서 연결</span>
               </div>
             </div>
             <div class="slot-site-map" aria-label="주차장 주변 건물 배치">
+              <div class="site-label top">공학 3호관</div>
               <div class="site-label left">공학 3호관</div>
-              <div class="slot-board-wrap">
-                <div class="slot-board">${cells}</div>
-              </div>
               <div class="site-label right">60주년 기념관</div>
               <div class="site-label bottom">백록관</div>
+              <div class="slot-lot-area">
+                ${slotRows[0]}
+                <div class="slot-driving-lane"><span class="slot-lane-arrow"></span></div>
+                ${slotRows[1]}
+                <div class="slot-driving-lane reverse"><span class="slot-lane-arrow"></span></div>
+                ${slotRows[2]}
+              </div>
             </div>
           </section>
         `;
       }
 
       function renderParkingPanel(item) {
-        const available = escapeHtml(item.realtimeAvailable || "-");
-        const total = escapeHtml(item.realtimeTotal || item.total || "-");
+        const available = escapeHtml(formatParkingValue(item.realtimeAvailable));
+        const total = escapeHtml(formatParkingValue(item.realtimeTotal || item.total));
         const operationText =
           item.operationSummary ||
           (Array.isArray(item.operationDetails) && item.operationDetails[0]) ||
@@ -2173,6 +2568,11 @@ if (destinationMarker) { destinationMarker.setMap(null); destinationMarker = nul
 
       function formatNumber(value) {
         return Number(value || 0).toLocaleString();
+      }
+
+      function formatParkingValue(value) {
+        if (value === null || value === undefined || String(value).trim() === "") return "-";
+        return String(value);
       }
 
       function rememberRealtimeRows(rows) {
@@ -2348,6 +2748,8 @@ if (destinationMarker) { destinationMarker.setMap(null); destinationMarker = nul
         button.addEventListener("click", () => setActiveView(button.dataset.view));
       });
       initMapListResizer();
+      stopPushWatchButton.addEventListener("click", stopRecommendationPushWatch);
+      updatePushWatchStatus();
 
       destinationSearchButton.addEventListener("click", applyDestinationSearch);
       destinationInput.addEventListener("keydown", (event) => {
@@ -2363,6 +2765,9 @@ if (destinationMarker) { destinationMarker.setMap(null); destinationMarker = nul
       });
 
       initVoiceInput();
+      registerParkingServiceWorker().catch((error) => {
+        if (!activePushWatchId) updatePushWatchStatus(error.message);
+      });
       loadKakaoNaviSdk().catch(() => {});
       loadParking();
     </script>

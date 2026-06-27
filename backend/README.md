@@ -8,6 +8,7 @@
 - **Framework**: Express
 - **DB**: SQLite (`node:sqlite` 내장 모듈)
 - **실시간**: SSE (Server-Sent Events)
+- **백그라운드 알림**: Web Push + Service Worker + VAPID
 - **AI**: Google Gemini API (추천 이유 자연어 생성)
 
 ---
@@ -42,6 +43,49 @@ npm start
 | `KAKAO_JAVASCRIPT_KEY` | 카카오 JavaScript 키 | |
 | `GEMINI_API_KEY` | Google Gemini API 키 | |
 | `DB_PATH` | SQLite DB 파일 경로 (기본 `./parking_mate.db`) | |
+| `VAPID_PUBLIC_KEY` | 브라우저 Push 구독에 사용하는 공개키 | Web Push 사용 시 |
+| `VAPID_PRIVATE_KEY` | 서버 Push 서명용 비공개키 | Web Push 사용 시 |
+| `VAPID_SUBJECT` | 운영자 연락처 URL 또는 `mailto:` 주소 | Web Push 사용 시 |
+| `PUSH_MONITOR_INTERVAL_MS` | 추천 주차장 확인 주기, 최소 30000ms | |
+
+---
+
+## 길찾기 중 추천 주차장 Web Push
+
+프론트에서 사용자가 `길찾기`를 누르면 현재 추천 목록과 브라우저 Push 구독을 `POST /api/push/watch`로 전달합니다. 백엔드는 감시 세션과 각 주차장의 마지막 잔여면을 SQLite에 저장하고 기본 1분 간격으로 상태를 비교합니다.
+
+```text
+모바일 길찾기 클릭
+  -> Web Push 권한 및 구독
+  -> 추천 주차장 최대 3곳 감시 등록
+  -> 카카오내비 앱 실행
+  -> Express 백엔드가 getParkRltm/Arduino DB 주기 조회
+  -> 잔여면 변경 시 Service Worker로 OS 알림
+```
+
+알림 유형:
+
+- `1면 이상 -> 0면`: 만차
+- `0면 -> 1면 이상`: 빈자리 발생
+- 그 외: 이전 잔여면과 현재 잔여면
+
+감시 세션은 기본 120분 뒤 만료되며, 같은 브라우저에서 새 길찾기를 시작하면 이전 세션을 교체합니다. 푸시 구독 엔드포인트는 비밀 URL이므로 로그나 Git에 기록하지 않습니다.
+
+VAPID 키는 최초 한 번 생성해 배포 환경변수에 보관합니다. 비공개키를 다시 생성하면 기존 사용자의 Push 구독이 무효화됩니다.
+
+```bash
+npx web-push generate-vapid-keys
+```
+
+API:
+
+| Method | Path | 설명 |
+|---|---|---|
+| `GET` | `/api/push/config` | 공개 VAPID 키와 감시 설정 조회 |
+| `POST` | `/api/push/watch` | 추천 목록 감시 시작 또는 교체 |
+| `DELETE` | `/api/push/watch/:watchId` | 감시 중지 |
+
+모바일 Web Push는 HTTPS가 필요합니다. iOS/iPadOS는 16.4 이상에서 홈 화면에 추가한 웹앱으로 실행해야 하며, 백엔드는 Railway처럼 장시간 실행되는 프로세스여야 합니다.
 
 ---
 

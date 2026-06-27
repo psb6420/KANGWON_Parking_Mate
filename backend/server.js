@@ -9,6 +9,8 @@ const statusRouter = require("./routes/status");
 const recommendRouter = require("./routes/recommend");
 const arduinoRouter = require("./routes/arduino");
 const destinationsRouter = require("./routes/destinations");
+const pushRouter = require("./routes/push");
+const { startPushMonitor } = require("./services/pushMonitor");
 
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
@@ -30,6 +32,7 @@ app.use("/api/parking", parkingRouter);
 app.use("/api/recommend", recommendRouter);
 app.use("/api/arduino", arduinoRouter);
 app.use("/api/destinations", destinationsRouter);
+app.use("/api/push", pushRouter);
 
 // 헬스체크
 app.get("/health", (_req, res) => {
@@ -50,6 +53,7 @@ app.use((err, _req, res, _next) => {
 app.listen(PORT, () => {
   console.log(`강원 Parking Mate Backend: http://localhost:${PORT}`);
   console.log(`  API Keys: DATA_GO_KR=${Boolean(process.env.DATA_GO_KR_SERVICE_KEY)}, KAKAO=${Boolean(process.env.KAKAO_REST_API_KEY)}, GEMINI=${Boolean(process.env.GEMINI_API_KEY)}`);
+  startPushMonitor();
 });
 
 module.exports = app;
