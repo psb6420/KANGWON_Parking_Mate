@@ -3228,7 +3228,7 @@ if (destinationMarker) { destinationMarker.setMap(null); destinationMarker = nul
           // URL에서 파라미터 제거 후 플로우 실행
           const cleanUrl = window.location.pathname + (window.location.hash || "");
           history.replaceState(null, "", cleanUrl);
-          if (data.action === "reroute") setTimeout(() => startRerouteFlow(data), 800);
+          if (data.action === "reroute") setTimeout(() => startRerouteFlow(data), 3000);
         } catch {}
       })();
     </script>

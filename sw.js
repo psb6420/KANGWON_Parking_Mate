@@ -32,9 +32,10 @@ self.addEventListener("notificationclick", (event) => {
       const target = clients.find((c) => "focus" in c);
 
       if (target) {
-        // 앱 창이 열려 있으면 postMessage로 reroute 데이터 전달
         if (notifData.action === "reroute") {
+          // reroute: postMessage만 보내고 navigate 금지 (navigate하면 페이지 리로드로 메시지 유실)
           target.postMessage({ type: "parking-reroute", ...notifData });
+          return target.focus();
         }
         if ("navigate" in target) target.navigate(targetUrl);
         return target.focus();
