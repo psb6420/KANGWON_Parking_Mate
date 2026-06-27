@@ -682,11 +682,16 @@
         border: 1px solid var(--line);
         border-radius: 8px;
         background: var(--panel-soft);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        gap: 4px;
       }
 
       .metric strong {
         display: block;
-        margin-top: 4px;
         color: var(--ink);
         font-size: 22px;
         line-height: 1;
@@ -826,6 +831,33 @@
         opacity: 0.65;
       }
 
+      .result-nav-btn {
+        position: absolute;
+        bottom: 8px;
+        right: 8px;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 10px;
+        border: 1px solid #e4ce00;
+        border-radius: 999px;
+        background: #fee500;
+        color: #191919;
+        font-size: 11px;
+        font-weight: 800;
+        cursor: pointer;
+        z-index: 1;
+      }
+
+      .result-nav-btn:hover {
+        background: #f7df00;
+      }
+
+      .result-nav-btn:disabled {
+        cursor: wait;
+        opacity: 0.65;
+      }
+
       .push-watch-status {
         display: flex;
         min-height: 38px;
@@ -904,6 +936,34 @@
       .congestion-badge.spare  { background: #d6f3e7; color: #0f7a45; }
       .congestion-badge.normal { background: #fef0d4; color: #a05f00; }
       .congestion-badge.busy   { background: #fde8e8; color: #c62828; }
+
+      .parking-panel .congestion-badge {
+        top: 16px;
+        right: 44px;
+      }
+
+      .panel-close-btn {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 28px;
+        height: 28px;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        font-size: 18px;
+        color: var(--muted);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        line-height: 1;
+        padding: 0;
+      }
+      .panel-close-btn:hover {
+        background: var(--panel-soft);
+        color: var(--ink);
+      }
 
       .map-wrap {
         position: relative;
@@ -995,10 +1055,42 @@
         backdrop-filter: blur(8px);
       }
 
+      .parking-panel.is-empty {
+        width: auto;
+        padding: 10px 16px;
+        background: rgba(255, 255, 255, 0.72);
+      }
+
       .parking-panel h2 {
         margin: 0 0 8px;
         font-size: 17px;
         line-height: 1.3;
+      }
+
+      .panel-empty {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 4px 0;
+        text-align: center;
+      }
+      .panel-empty-icon {
+        font-size: 36px;
+        line-height: 1;
+        opacity: 0.6;
+      }
+      .panel-empty-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--ink);
+        margin: 0;
+      }
+      .panel-empty-sub {
+        font-size: 12px;
+        color: var(--muted);
+        margin: 0;
       }
 
       .parking-panel .metric {
@@ -1306,7 +1398,6 @@
         <div class="section-title">
           <div>
             <h2 style="margin:0">추천 주차장</h2>
-            <span style="font-size:12px;color:#888">주차장을 누르면 지도에서 확인할 수 있어요</span>
           </div>
         </div>
         <div class="push-watch-status" id="pushWatchStatus" role="status">
@@ -1336,11 +1427,10 @@
           <span class="map-chip"><span class="dot amber"></span>보통</span>
           <span class="map-chip"><span class="dot red"></span>혼잡</span>
         </div>
-        <aside class="parking-panel" id="parkingPanel">
-          <h2>주차장을 선택하세요</h2>
-          <p class="panel-meta">
-            실시간 주차장을 불러온 뒤 목록 또는 지도 마커를 누르면 잔여면과 운영 정보가 여기에 표시됩니다.
-          </p>
+        <aside class="parking-panel is-empty" id="parkingPanel">
+          <div class="panel-empty">
+            <p class="panel-empty-title">가까운 마커를 눌러보세요</p>
+          </div>
         </aside>
         <div class="map-loading">지도가 표시됩니다.</div>
       </section>
@@ -1432,15 +1522,26 @@
       let activePushWatchExpiresAt = window.localStorage.getItem("parkingMatePushWatchExpiresAt") || "";
 
       function makeMarkerImage(color, label = "") {
-        const w = 32, h = 40;
+        const w = 38, h = 50;
+        const cx = 19, cy = 19;
         const safeLabel = String(label || "").replace(/[^0-9A-Z]/g, "").slice(0, 2);
-        const fontSize = safeLabel.length > 1 ? 11 : 14;
+        const fontSize = safeLabel.length > 1 ? 12 : 15;
         const inner = safeLabel
-          ? `<circle cx="16" cy="15" r="10" fill="white"/><text x="16" y="20" text-anchor="middle" font-family="sans-serif" font-size="${fontSize}" font-weight="900" fill="${color}">${safeLabel}</text>`
-          : `<circle cx="16" cy="15" r="6" fill="white" opacity="0.35"/>`;
-        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><path d="M16 0C7.2 0 0 7.2 0 16c0 11.5 16 24 16 24s16-12.5 16-24C32 7.2 24.8 0 16 0z" fill="${color}"/>${inner}</svg>`;
+          ? `<circle cx="${cx}" cy="${cy}" r="11" fill="white"/><text x="${cx}" y="${cy + 5}" text-anchor="middle" font-family="sans-serif" font-size="${fontSize}" font-weight="900" fill="${color}">${safeLabel}</text>`
+          : `<circle cx="${cx}" cy="${cy}" r="6" fill="white" opacity="0.5"/>`;
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+          <defs>
+            <filter id="ds" x="-40%" y="-20%" width="180%" height="180%">
+              <feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-color="rgba(0,0,0,0.32)"/>
+            </filter>
+          </defs>
+          <path d="M19 2C10.7 2 4 8.7 4 17c0 12.5 15 29 15 29s15-16.5 15-29C34 8.7 27.3 2 19 2z" fill="white" filter="url(#ds)"/>
+          <path d="M19 4C11.8 4 6 9.8 6 17c0 11.5 13 27 13 27s13-15.5 13-27C32 9.8 26.2 4 19 4z" fill="${color}"/>
+          <path d="M19 5C13 5 8 10 8 16.5c0 3.5 1.2 7 3 10C12 20 15.5 14 19 14s7 6 8 12.5c1.8-3 3-6.5 3-10C30 10 25 5 19 5z" fill="white" opacity="0.18"/>
+          ${inner}
+        </svg>`;
         const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
-        return new kakao.maps.MarkerImage(url, new kakao.maps.Size(w, h), { offset: new kakao.maps.Point(16, h) });
+        return new kakao.maps.MarkerImage(url, new kakao.maps.Size(w, h), { offset: new kakao.maps.Point(cx, h) });
       }
 
       function congestionBadge(item, extra = "") {
@@ -1785,7 +1886,7 @@
       }
 
       function setMobileMapSplit(percent) {
-        mobileMapSplitPercent = Math.min(70, Math.max(30, Math.round(percent)));
+        mobileMapSplitPercent = Math.min(95, Math.max(30, Math.round(percent)));
         appShellEl.style.setProperty("--mobile-map-split", `${mobileMapSplitPercent}%`);
         mapListResizerEl.setAttribute("aria-valuenow", String(mobileMapSplitPercent));
         mapListResizerEl.setAttribute(
@@ -1825,7 +1926,7 @@
             setMobileMapSplit(30);
           } else if (event.key === "End") {
             event.preventDefault();
-            setMobileMapSplit(70);
+            setMobileMapSplit(95);
           }
         });
       }
@@ -2957,14 +3058,6 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
         const siteLabel = (pos) => surrounding[pos] ? `<div class="site-label ${pos}">${escapeHtml(surrounding[pos])}</div>` : "";
         return `
           <section class="slot-panel" aria-label="${escapeHtml(item.name)} 주차면">
-            <div class="slot-panel-head">
-              <div class="slot-legend" aria-label="주차면 상태 범례">
-                <span><i class="slot-dot available"></i>비어 있음</span>
-                <span><i class="slot-dot occupied"></i>주차 중</span>
-                <span><i class="slot-dot sensor"></i>센서 연결</span>
-                <span><i class="slot-dot recommend"></i>추천 자리</span>
-              </div>
-            </div>
             <div class="slot-site-map" aria-label="주차장 주변 건물 배치">
               ${siteLabel("top")}
               ${siteLabel("left")}
@@ -2976,6 +3069,14 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
                 ${slotRows[1]}
                 <div class="slot-driving-lane reverse"><span class="slot-lane-arrow"></span></div>
                 ${slotRows[2]}
+              </div>
+            </div>
+            <div class="slot-panel-head">
+              <div class="slot-legend" aria-label="주차면 상태 범례">
+                <span><i class="slot-dot available"></i>비어 있음</span>
+                <span><i class="slot-dot occupied"></i>주차 중</span>
+                <span><i class="slot-dot sensor"></i>센서 연결</span>
+                <span><i class="slot-dot recommend"></i>추천 자리</span>
               </div>
             </div>
           </section>
@@ -2990,17 +3091,19 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
           : (item.operationSummary ||
             (Array.isArray(item.operationDetails) && item.operationDetails[0]) ||
             "운영 정보 확인 중");
+        parkingPanelEl.classList.remove("is-empty");
         parkingPanelEl.innerHTML = `
-          <h2 style="margin:0 0 8px;font-size:17px;line-height:1.3;padding-right:56px">${escapeHtml(item.name || "주차장")}</h2>
+          <button class="panel-close-btn" id="panelCloseBtn" aria-label="닫기">✕</button>
+          <h2 style="margin:0 0 8px;font-size:17px;line-height:1.3;padding-right:90px">${escapeHtml(item.name || "주차장")}</h2>
           ${congestionBadge(item)}
           <p class="panel-meta">${escapeHtml(item.address || "주소 정보 없음")}</p>
           <div class="metric-grid" style="margin:12px 0 10px">
             <div class="metric">
-              <span>잔여면</span>
+              <span>잔여 주차면 수</span>
               <strong>${available}</strong>
             </div>
             <div class="metric">
-              <span>총면수</span>
+              <span>총 주차면 수</span>
               <strong>${total}</strong>
             </div>
             <div class="metric">
@@ -3011,6 +3114,15 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
           ${operationText ? `<p class="panel-meta">${escapeHtml(operationText)}</p>` : ""}
           ${renderArduinoSlotBoard(item)}
         `;
+        document.getElementById("panelCloseBtn")?.addEventListener("click", () => {
+          activeParkingItem = null;
+          parkingPanelEl.classList.add("is-empty");
+          parkingPanelEl.innerHTML = `
+            <div class="panel-empty">
+              <p class="panel-empty-title">가까운 마커를 눌러보세요</p>
+            </div>
+          `;
+        });
       }
 
       function formatSourceRows(item, withBreaks = false) {
