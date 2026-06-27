@@ -2101,14 +2101,19 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
 
         async function toggleSlot() {
           btn.disabled = true;
+          const nextOccupied = !isOccupied;
           try {
-            await fetch(`${parkingBackendOrigin}/api/arduino/slot`, {
+            const res = await fetch(`${parkingBackendOrigin}/api/arduino/slot`, {
               method: "POST",
               headers: { "content-type": "application/json" },
-              body: JSON.stringify({ lot_id: LOT_ID, slot_no: SLOT_NO, is_occupied: !isOccupied }),
+              body: JSON.stringify({ lot_id: LOT_ID, slot_no: SLOT_NO, is_occupied: nextOccupied }),
             });
-            isOccupied = !isOccupied;
-          } catch { /* 실패해도 UI 유지 */ }
+            if (res.ok) {
+              isOccupied = nextOccupied;
+              // 지도/카드 즉시 반영
+              applyArduinoUpdate({ type: "update", lot_id: LOT_ID, slot_no: SLOT_NO, is_occupied: nextOccupied });
+            }
+          } catch { /* 네트워크 오류 무시 */ }
           btn.disabled = false;
           updateBtn();
         }
