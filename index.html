@@ -265,22 +265,28 @@
       }
 
       .slot-legend {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
         color: var(--muted);
-        font-size: 11px;
+        font-size: 13px;
+        width: 100%;
       }
 
       .slot-legend span {
-        display: inline-flex;
+        display: flex;
         align-items: center;
-        gap: 4px;
+        justify-content: flex-start;
+        gap: 6px;
+        padding: 8px 16px;
+        background: rgba(255,255,255,0.04);
+        border-radius: 6px;
+        font-weight: 600;
       }
 
       .slot-dot {
-        width: 9px;
-        height: 9px;
+        width: 11px;
+        height: 11px;
         border-radius: 999px;
       }
 
@@ -294,6 +300,10 @@
 
       .slot-dot.sensor {
         background: #2563eb;
+      }
+
+      .slot-dot.recommend {
+        background: #f59e0b;
       }
 
       .slot-site-map {
@@ -545,6 +555,8 @@
         color: #fff;
         font-size: 7px;
         font-weight: 800;
+        writing-mode: horizontal-tb;
+        text-align: center;
       }
 
       .slot-cell.recommended {
@@ -564,6 +576,8 @@
         color: #fff;
         font-size: 7px;
         font-weight: 800;
+        writing-mode: horizontal-tb;
+        text-align: center;
       }
 
 
@@ -2931,8 +2945,6 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
               >
                 <strong>${escapeHtml(slot.label)}</strong>
                 <span class="slot-car" aria-hidden="true"></span>
-                <span class="slot-status"><i class="slot-dot ${statusClass}"></i>${escapeHtml(statusText)}</span>
-                ${slot.isSensorLinked ? '<span class="slot-sensor-badge">Arduino</span>' : ""}
                 ${isRecommended ? '<span class="slot-recommend-badge">추천</span>' : ""}
               </div>
             `;
@@ -2946,14 +2958,11 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
         return `
           <section class="slot-panel" aria-label="${escapeHtml(item.name)} 주차면">
             <div class="slot-panel-head">
-              <div>
-                <strong>4 x 3 주차면</strong>
-                <span class="panel-meta">A1-A12, ${escapeHtml(item.slotLayout?.arduinoSlot || "A1")}은 Arduino 센서와 연결</span>
-              </div>
               <div class="slot-legend" aria-label="주차면 상태 범례">
                 <span><i class="slot-dot available"></i>비어 있음</span>
                 <span><i class="slot-dot occupied"></i>주차 중</span>
                 <span><i class="slot-dot sensor"></i>센서 연결</span>
+                <span><i class="slot-dot recommend"></i>추천 자리</span>
               </div>
             </div>
             <div class="slot-site-map" aria-label="주차장 주변 건물 배치">
@@ -2976,10 +2985,11 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
       function renderParkingPanel(item) {
         const available = escapeHtml(formatParkingValue(item.realtimeAvailable));
         const total = escapeHtml(formatParkingValue(item.realtimeTotal || item.total));
-        const operationText =
-          item.operationSummary ||
-          (Array.isArray(item.operationDetails) && item.operationDetails[0]) ||
-          "운영 정보 확인 중";
+        const operationText = item.isVirtualArduinoLot
+          ? ""
+          : (item.operationSummary ||
+            (Array.isArray(item.operationDetails) && item.operationDetails[0]) ||
+            "운영 정보 확인 중");
         parkingPanelEl.innerHTML = `
           <h2 style="margin:0 0 8px;font-size:17px;line-height:1.3;padding-right:56px">${escapeHtml(item.name || "주차장")}</h2>
           ${congestionBadge(item)}
@@ -2998,7 +3008,7 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
               <strong>${escapeHtml((() => { const d = formatItemDelta(item); const m = d.match(/([+-]\d+)면/); return m ? m[1] + "면" : "-"; })())}</strong>
             </div>
           </div>
-          <p class="panel-meta">${escapeHtml(operationText)}</p>
+          ${operationText ? `<p class="panel-meta">${escapeHtml(operationText)}</p>` : ""}
           ${renderArduinoSlotBoard(item)}
         `;
       }
