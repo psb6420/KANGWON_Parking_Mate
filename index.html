@@ -3273,6 +3273,32 @@ if (destinationMarker) { destinationMarker.setMap(null); destinationMarker = nul
 
       initVoiceInput();
       initDebugSlotToggle();
+
+      // 첫 사용자 제스처 시 TTS 언락 + 마이크 권한 사전 요청
+      // iOS/Android는 user gesture 없이 speechSynthesis.speak()를 막으므로
+      // 첫 탭/클릭 때 무음 발화로 오디오 컨텍스트를 활성화해두면
+      // 이후 자동 TTS(알림 클릭 → 경로 변경 안내)가 버튼 없이도 재생됨
+      (function primeAudioAndMic() {
+        let primed = false;
+        const prime = async () => {
+          if (primed) return;
+          primed = true;
+          if (window.speechSynthesis) {
+            const u = new SpeechSynthesisUtterance("");
+            u.volume = 0;
+            try { window.speechSynthesis.speak(u); } catch {}
+          }
+          try {
+            if (navigator.mediaDevices?.getUserMedia) {
+              const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+              stream.getTracks().forEach((t) => t.stop());
+            }
+          } catch {}
+        };
+        document.addEventListener("touchstart", prime, { once: true, passive: true });
+        document.addEventListener("click", prime, { once: true });
+      })();
+
       registerParkingServiceWorker().catch((error) => {
         if (!activePushWatchId) updatePushWatchStatus(error.message);
       });
