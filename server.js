@@ -764,6 +764,30 @@ async function proxyParkingReasons(req, res) {
   }
 }
 
+async function proxyInterpretYesNo(req, res) {
+  if (req.method !== "POST") { sendJson(res, 405, { message: "POST required." }); return; }
+  try {
+    const body = await readJsonBody(req);
+    const text = String(body?.text || "").trim();
+    if (!text) { sendJson(res, 200, { isYes: null }); return; }
+    const apiKey = cleanSecret(process.env.GEMINI_API_KEY);
+    if (!apiKey) { sendJson(res, 200, { isYes: null }); return; }
+    const prompt = `사용자가 "예 또는 아니오"로 대답했다. 다음 발화가 긍정이면 true, 부정이면 false, 판단 불가면 null을 반환해라.\n발화: "${text}"\nJSON으로만 답해라: {"isYes": true|false|null}`;
+    const response = await fetch(`${GEMINI_API_URL}?key=${encodeURIComponent(apiKey)}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0, maxOutputTokens: 20, responseMimeType: "application/json" },
+      }),
+    });
+    const data = await response.json();
+    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+    const parsed = JSON.parse(raw);
+    sendJson(res, 200, { isYes: parsed.isYes ?? null });
+  } catch { sendJson(res, 200, { isYes: null }); }
+}
+
 async function proxyParkingIntent(req, res) {
   if (req.method !== "POST") {
     sendJson(res, 405, { message: "POST method is required." });
@@ -807,7 +831,11 @@ function requestHandler(req, res) {
     return;
   }
 
-  
+  if (reqUrl.pathname === "/api/ai/interpret-yes-no") {
+    proxyInterpretYesNo(req, res);
+    return;
+  }
+
   if (
     reqUrl.pathname === "/api/parking/gangwon-realtime" ||
     reqUrl.pathname === "/api/parking/chuncheon-realtime" ||

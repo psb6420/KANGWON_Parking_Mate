@@ -1078,6 +1078,81 @@
         }
       }
 
+      .reroute-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        background: rgba(0,0,0,0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+      .reroute-overlay[hidden] { display: none; }
+      .reroute-card {
+        background: var(--panel);
+        border-radius: 16px;
+        padding: 28px 24px;
+        max-width: 340px;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.28);
+      }
+      .reroute-title {
+        font-size: 18px;
+        font-weight: 700;
+        color: #c0392b;
+      }
+      .reroute-question {
+        font-size: 15px;
+        line-height: 1.5;
+        color: var(--ink);
+      }
+      .reroute-next-name {
+        font-weight: 600;
+        color: #1769e0;
+      }
+      .reroute-status {
+        font-size: 13px;
+        color: var(--muted);
+        min-height: 20px;
+      }
+      .reroute-listening {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        color: #1769e0;
+      }
+      .reroute-mic-pulse {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #1769e0;
+        animation: mic-pulse 1s ease-in-out infinite;
+      }
+      @keyframes mic-pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.4; transform: scale(0.7); }
+      }
+      .reroute-actions {
+        display: flex;
+        gap: 10px;
+      }
+      .reroute-btn {
+        flex: 1;
+        padding: 12px;
+        border: none;
+        border-radius: 10px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .reroute-btn-yes { background: #1769e0; color: #fff; }
+      .reroute-btn-no { background: var(--panel-soft); color: var(--ink); border: 1px solid var(--line); }
+
     </style>
   </head>
   <body>
@@ -1183,6 +1258,22 @@
         <div class="map-loading">지도가 표시됩니다.</div>
       </section>
     </main>
+
+    <!-- 만차 → 경로 변경 모달 -->
+    <div class="reroute-overlay" id="rerouteOverlay" hidden aria-modal="true" role="dialog">
+      <div class="reroute-card">
+        <div class="reroute-title" id="rerouteTitle">만차</div>
+        <div class="reroute-question">
+          <span id="rerouteNextName" class="reroute-next-name"></span>으로 경로를 변경할까요?
+        </div>
+        <div class="reroute-status" id="rerouteStatus"></div>
+        <div class="reroute-actions">
+          <button class="reroute-btn reroute-btn-yes" id="rerouteBtnYes">예</button>
+          <button class="reroute-btn reroute-btn-no" id="rerouteBtnNo">아니오</button>
+        </div>
+      </div>
+    </div>
+
     <nav class="bottom-tabs" aria-label="하단 화면 탭">
       <button class="tab-button" type="button" data-view="home" aria-selected="true">
         홈
@@ -1356,12 +1447,132 @@
           .filter((row) => Number.isFinite(row.destinationDistanceM))
           .slice(0, 3);
         const rows = recommendations.length ? recommendations : [navigatedItem];
-        return rows.map((row) => ({
+        return rows.map((row, index) => ({
           managementNo: row.managementNo,
           name: row.name || "주차장",
           available: parseNumberOrNull(row.realtimeAvailable),
           total: parseNumberOrNull(row.realtimeTotal || row.total),
+          lat: row.lat,
+          lng: row.lng,
+          ranking: index + 1,
         }));
+      }
+
+      // ── TTS ──────────────────────────────────────────────────
+      function speak(text) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = "ko-KR";
+        utterance.rate = 0.95;
+        window.speechSynthesis.speak(utterance);
+        return new Promise((resolve) => {
+          utterance.onend = resolve;
+          utterance.onerror = resolve;
+          setTimeout(resolve, text.length * 90 + 2500);
+        });
+      }
+
+      // ── STT ──────────────────────────────────────────────────
+      function listenForVoice(timeoutMs = 7000) {
+        return new Promise((resolve) => {
+          const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+          if (!SR) { resolve(""); return; }
+          const rec = new SR();
+          rec.lang = "ko-KR";
+          rec.continuous = false;
+          rec.interimResults = false;
+          let done = false;
+          const finish = (result) => { if (!done) { done = true; try { rec.stop(); } catch {} resolve(result); } };
+          rec.onresult = (e) => finish(e.results[0]?.[0]?.transcript || "");
+          rec.onerror = () => finish("");
+          rec.onend = () => finish("");
+          setTimeout(() => finish(""), timeoutMs);
+          try { rec.start(); } catch { finish(""); }
+        });
+      }
+
+      // ── 예/아니오 해석 (키워드 우선, 애매하면 Gemini) ──────
+      async function interpretYesNo(text) {
+        const t = text.trim();
+        if (!t) return null;
+        const YES = ["예", "네", "응", "맞아", "그래", "좋아", "변경", "바꿔", "바꾸", "이동", "출발"];
+        const NO  = ["아니오", "아니", "싫어", "유지", "그냥", "괜찮아", "안 해", "안해"];
+        if (YES.some((w) => t.includes(w))) return true;
+        if (NO.some((w) => t.includes(w)))  return false;
+        // 키워드 매칭 실패 시 Gemini로 해석
+        try {
+          const res = await fetch(appApiUrl("/api/ai/interpret-yes-no"), {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ text: t }),
+          });
+          const data = await res.json().catch(() => ({}));
+          return typeof data.isYes === "boolean" ? data.isYes : null;
+        } catch { return null; }
+      }
+
+      // ── 경로 변경 플로우 ─────────────────────────────────────
+      let rerouteActive = false;
+      async function startRerouteFlow({ fullLotName, nextLot }) {
+        if (rerouteActive || !nextLot?.lat || !nextLot?.lng) return;
+        rerouteActive = true;
+
+        const overlay  = document.getElementById("rerouteOverlay");
+        const titleEl  = document.getElementById("rerouteTitle");
+        const nextEl   = document.getElementById("rerouteNextName");
+        const statusEl = document.getElementById("rerouteStatus");
+        const btnYes   = document.getElementById("rerouteBtnYes");
+        const btnNo    = document.getElementById("rerouteBtnNo");
+
+        titleEl.textContent = `${fullLotName} 만차`;
+        nextEl.textContent  = nextLot.name;
+        statusEl.textContent = "";
+        overlay.hidden = false;
+
+        const question = `${fullLotName}이 만차입니다. ${nextLot.name}으로 경로를 변경할까요? 예 또는 아니오로 말씀해 주세요.`;
+
+        const cleanup = (navigating) => {
+          overlay.hidden = true;
+          rerouteActive = false;
+          if (!navigating) speak("기존 경로를 유지합니다.");
+        };
+
+        const doReroute = async () => {
+          cleanup(true);
+          speak(`${nextLot.name}으로 경로를 변경합니다.`);
+          await new Promise((r) => setTimeout(r, 1000));
+          try {
+            const KakaoSdk = window.Kakao?.Navi ? window.Kakao : await loadKakaoNaviSdk();
+            KakaoSdk.Navi.start({ name: nextLot.name, x: nextLot.lng, y: nextLot.lat, coordType: "wgs84" });
+          } catch (e) {
+            setStatus(`카카오내비 실행 실패: ${e.message}`);
+          }
+        };
+
+        btnYes.onclick = doReroute;
+        btnNo.onclick  = () => cleanup(false);
+
+        // TTS 질문
+        await speak(question);
+
+        // STT 수신
+        statusEl.innerHTML = `<div class="reroute-listening"><div class="reroute-mic-pulse"></div>듣는 중…</div>`;
+        const heard = await listenForVoice();
+        statusEl.textContent = heard ? `"${heard}"` : "음성을 인식하지 못했습니다.";
+
+        if (!overlay.hidden) {
+          const isYes = await interpretYesNo(heard);
+          if (isYes === true) {
+            await doReroute();
+          } else if (isYes === false) {
+            cleanup(false);
+          } else {
+            // null: 판단 불가 → 버튼 대기 유지
+            statusEl.textContent = heard
+              ? `"${heard}" — 버튼으로 선택해 주세요.`
+              : "버튼으로 선택해 주세요.";
+          }
+        }
       }
 
       async function startRecommendationPushWatch(navigatedItem) {
@@ -2857,6 +3068,29 @@ if (destinationMarker) { destinationMarker.setMap(null); destinationMarker = nul
       });
       loadKakaoNaviSdk().catch(() => {});
       loadParking();
+
+      // SW postMessage 수신 (앱이 열려 있을 때 알림 탭)
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.addEventListener("message", (event) => {
+          if (event.data?.type === "parking-reroute") {
+            startRerouteFlow(event.data);
+          }
+        });
+      }
+
+      // 앱이 닫혀 있다가 알림 탭으로 열린 경우 URL에서 reroute 데이터 복원
+      (function checkPendingReroute() {
+        try {
+          const params = new URLSearchParams(window.location.search);
+          const raw = params.get("pendingReroute");
+          if (!raw) return;
+          const data = JSON.parse(decodeURIComponent(raw));
+          // URL에서 파라미터 제거 후 플로우 실행
+          const cleanUrl = window.location.pathname + (window.location.hash || "");
+          history.replaceState(null, "", cleanUrl);
+          if (data.action === "reroute") setTimeout(() => startRerouteFlow(data), 800);
+        } catch {}
+      })();
     </script>
   </body>
 </html>

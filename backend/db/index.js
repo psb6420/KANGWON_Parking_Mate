@@ -141,6 +141,10 @@ function initSchema(db) {
     CREATE INDEX IF NOT EXISTS idx_parking_watch_expires
       ON parking_watch_sessions(expires_at);
   `);
+  // 기존 DB에 컬럼 추가 (이미 있으면 무시)
+  try { db.exec("ALTER TABLE parking_watch_lots ADD COLUMN lat REAL"); } catch {}
+  try { db.exec("ALTER TABLE parking_watch_lots ADD COLUMN lng REAL"); } catch {}
+  try { db.exec("ALTER TABLE parking_watch_lots ADD COLUMN ranking INTEGER DEFAULT 0"); } catch {}
   seedDefaultArduinoLots(db);
 }
 

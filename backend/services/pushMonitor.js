@@ -59,11 +59,16 @@ function normalizeLots(lots) {
     const managementNo = String(lot?.managementNo || "").trim();
     if (!managementNo || seen.has(managementNo)) continue;
     seen.add(managementNo);
+    const lat = Number(lot?.lat);
+    const lng = Number(lot?.lng);
     normalized.push({
       managementNo,
       name: String(lot?.name || managementNo).trim().slice(0, 120),
       available: integerOrNull(lot?.available),
       total: integerOrNull(lot?.total),
+      lat: Number.isFinite(lat) ? lat : null,
+      lng: Number.isFinite(lng) ? lng : null,
+      ranking: Number.isFinite(Number(lot?.ranking)) ? Number(lot.ranking) : 0,
     });
     if (normalized.length >= MAX_WATCH_LOTS) break;
   }
@@ -132,11 +137,11 @@ async function registerWatch({ subscription, lots, destinationName, durationMinu
 
     const insertLot = db.prepare(
       `INSERT INTO parking_watch_lots
-       (watch_id, management_no, name, last_available, total_spots)
-       VALUES (?, ?, ?, ?, ?)`,
+       (watch_id, management_no, name, last_available, total_spots, lat, lng, ranking)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     for (const lot of normalizedLots) {
-      insertLot.run(watchId, lot.managementNo, lot.name, lot.available, lot.total);
+      insertLot.run(watchId, lot.managementNo, lot.name, lot.available, lot.total, lot.lat, lot.lng, lot.ranking);
     }
     db.exec("COMMIT");
   } catch (error) {
@@ -257,6 +262,21 @@ function describeChange(change) {
   return `${change.name} ${change.previous}→${change.current}면 ${direction}`;
 }
 
+function reroutePayload(watch, fullLotName, nextLot) {
+  return {
+    title: `${fullLotName} 만차`,
+    body: `${nextLot.name}으로 경로를 변경할까요? 알림을 눌러 응답하세요.`,
+    tag: `parking-watch-${watch.watch_id}`,
+    data: {
+      url: "/?view=map",
+      watchId: watch.watch_id,
+      action: "reroute",
+      fullLotName,
+      nextLot: { managementNo: nextLot.management_no, name: nextLot.name, lat: nextLot.lat, lng: nextLot.lng },
+    },
+  };
+}
+
 function notificationPayload(watch, changes) {
   if (changes.length === 1) {
     const change = changes[0];
@@ -318,12 +338,13 @@ async function runPushMonitor() {
       .prepare(
         `SELECT w.watch_id, w.endpoint, w.destination_name, w.expires_at,
                 s.p256dh, s.auth,
-                l.management_no, l.name, l.last_available, l.total_spots
+                l.management_no, l.name, l.last_available, l.total_spots,
+                l.lat, l.lng, l.ranking
          FROM parking_watch_sessions w
          JOIN push_subscriptions s ON s.endpoint = w.endpoint
          JOIN parking_watch_lots l ON l.watch_id = w.watch_id
          WHERE w.expires_at > ?
-         ORDER BY w.watch_id, l.management_no`,
+         ORDER BY w.watch_id, COALESCE(l.ranking, 99)`,
       )
       .all(new Date().toISOString());
 
@@ -370,9 +391,25 @@ async function runPushMonitor() {
         );
       }
 
-      const payload = changes.length
-        ? notificationPayload(watch, changes)
-        : statusPayload(watch, watch.lots, states);
+      // 만차로 변한 주차장이 있으면 다음 이용 가능한 주차장으로 경로 변경 제안
+      const fullChanges = changes.filter((c) => c.current === 0 && c.previous > 0);
+      let payload;
+      if (fullChanges.length > 0) {
+        const fullIds = new Set(fullChanges.map((c) => c.managementNo));
+        const nextLot = watch.lots
+          .filter((l) => !fullIds.has(l.management_no) && l.lat && l.lng)
+          .find((l) => {
+            const s = states.get(l.management_no);
+            return s?.available > 0;
+          });
+        payload = nextLot
+          ? reroutePayload(watch, fullChanges[0].name, nextLot)
+          : notificationPayload(watch, changes);
+      } else {
+        payload = changes.length
+          ? notificationPayload(watch, changes)
+          : statusPayload(watch, watch.lots, states);
+      }
 
       const subscription = {
         endpoint: watch.endpoint,

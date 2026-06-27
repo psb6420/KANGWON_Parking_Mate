@@ -24,16 +24,33 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const targetUrl = new URL(event.notification.data?.url || "/?view=map", self.location.origin).href;
+  const notifData = event.notification.data || {};
+  const targetUrl = new URL(notifData.url || "/?view=map", self.location.origin).href;
+
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
-      for (const client of clients) {
-        if ("focus" in client) {
-          if ("navigate" in client) client.navigate(targetUrl);
-          return client.focus();
+      const target = clients.find((c) => "focus" in c);
+
+      if (target) {
+        // 앱 창이 열려 있으면 postMessage로 reroute 데이터 전달
+        if (notifData.action === "reroute") {
+          target.postMessage({ type: "parking-reroute", ...notifData });
         }
+        if ("navigate" in target) target.navigate(targetUrl);
+        return target.focus();
       }
-      return self.clients.openWindow ? self.clients.openWindow(targetUrl) : undefined;
+
+      // 앱 창이 없으면 새 창 열기 (URL에 데이터 포함)
+      if (self.clients.openWindow) {
+        const openUrl =
+          notifData.action === "reroute"
+            ? new URL(
+                `${targetUrl}&pendingReroute=${encodeURIComponent(JSON.stringify(notifData))}`,
+                self.location.origin,
+              ).href
+            : targetUrl;
+        return self.clients.openWindow(openUrl);
+      }
     }),
   );
 });
