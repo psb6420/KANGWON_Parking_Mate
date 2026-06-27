@@ -1803,18 +1803,23 @@
 
         titleEl.textContent = `${fullLotName} 만차`;
         nextEl.textContent  = nextLot.name;
-        statusEl.textContent = "예 / 아니오 버튼으로 선택하거나, 🔊 눌러 음성 안내를 받으세요.";
+        statusEl.textContent = "";
         overlay.hidden = false;
 
         const question = `${fullLotName}이 만차입니다. ${nextLot.name}으로 경로를 변경할까요? 예 또는 아니오로 말씀해 주세요.`;
 
+        let rerouteTimer = null;
+        const stopTimer = () => { if (rerouteTimer) { clearInterval(rerouteTimer); rerouteTimer = null; } };
+
         const cleanup = (navigating) => {
+          stopTimer();
           overlay.hidden = true;
           rerouteActive = false;
           if (!navigating) speak("기존 경로를 유지합니다.");
         };
 
         const doReroute = async () => {
+          stopTimer();
           cleanup(true);
           speak(`${nextLot.name}으로 경로를 변경합니다.`);
           await new Promise((r) => setTimeout(r, 1000));
@@ -1832,6 +1837,7 @@
         // STT 한 번 시도 후 결과 처리
         const runVoice = async () => {
           if (!overlay.hidden) {
+            stopTimer(); // 카운트다운 중지
             if (btnMic) btnMic.disabled = true;
             statusEl.innerHTML = `<div class="reroute-listening"><div class="reroute-mic-pulse"></div>듣는 중…</div>`;
             const heard = await listenForVoice(7000);
@@ -1854,8 +1860,9 @@
         // 🎤 말하기: STT만
         if (btnMic) btnMic.onclick = runVoice;
 
-        // 🔊 다시 듣기: TTS만 재생 (STT는 user gesture인 🎤 버튼으로만 시작)
-        const runTtsAndVoice = async () => {
+        // 🔊 다시 듣기: TTS 재생 (카운트다운 중지)
+        const runTts = async () => {
+          stopTimer();
           if (btnTts) btnTts.disabled = true;
           if (btnMic) btnMic.disabled = true;
           await speak(question);
@@ -1865,13 +1872,19 @@
             statusEl.textContent = "🎤 말하기를 눌러 음성으로 답하거나, 버튼을 선택하세요.";
           }
         };
-        if (btnTts) btnTts.onclick = runTtsAndVoice;
+        if (btnTts) btnTts.onclick = runTts;
 
-        // 자동 TTS 시도 (user gesture 없이 실패할 수 있음)
-        // STT는 자동 시작하지 않음 — rec.start()는 user gesture(🎤 클릭) 내에서만 호출해야 권한 다이얼로그 없음
+        // 자동 TTS 후 카운트다운 → 자동 경로 변경
         await speak(question);
         if (!overlay.hidden) {
-          statusEl.textContent = "🎤 말하기를 눌러 음성으로 답하거나, 버튼을 선택하세요.";
+          let secs = 8;
+          statusEl.textContent = `${secs}초 후 자동으로 경로를 변경합니다 · 아니오로 취소`;
+          rerouteTimer = setInterval(() => {
+            if (overlay.hidden) { stopTimer(); return; }
+            secs--;
+            if (secs <= 0) { stopTimer(); doReroute(); }
+            else statusEl.textContent = `${secs}초 후 자동으로 경로를 변경합니다 · 아니오로 취소`;
+          }, 1000);
         }
       }
 
@@ -3519,7 +3532,7 @@ if (destinationMarker) { destinationMarker.setMap(null); destinationMarker = nul
           <div style="background:#fff;border-radius:16px;padding:28px 24px;max-width:300px;width:100%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.28);">
             <div style="font-size:38px;margin-bottom:10px;">🔊</div>
             <div style="font-size:17px;font-weight:700;margin-bottom:8px;color:#142033;">음성 안내 사용</div>
-            <div style="font-size:13px;color:#66758a;line-height:1.55;margin-bottom:22px;">"강원 Parking Mate"에서<br>주차 경로 안내 음성을 재생하려고 합니다.</div>
+            <div style="font-size:13px;color:#66758a;line-height:1.55;margin-bottom:22px;">"강원 Parking Mate"에서<br>음성 안내 재생 및 음성 입력을 위해<br>마이크 접근을 요청합니다.</div>
             <div style="display:flex;gap:10px;">
               <button id="ttsDenyBtn" style="flex:1;height:44px;border:1px solid #d8e1eb;border-radius:10px;background:#f7f9fc;color:#66758a;font-size:14px;font-weight:600;cursor:pointer;">허용 안 함</button>
               <button id="ttsAllowBtn" style="flex:1;height:44px;border:none;border-radius:10px;background:#1769e0;color:#fff;font-size:14px;font-weight:600;cursor:pointer;">허용</button>
@@ -3531,15 +3544,15 @@ if (destinationMarker) { destinationMarker.setMap(null); destinationMarker = nul
           const u = new SpeechSynthesisUtterance("");
           u.volume = 0;
           try { window.speechSynthesis.speak(u); } catch {}
-          // iOS webkitSpeechRecognition은 getUserMedia와 별도 권한 — user gesture 내에서 미리 요청
+          // 마이크 권한 사전 획득 — 이후 🎤 탭 시 iOS 다이얼로그 없음
           const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
           if (SR) {
             try {
               const warmup = new SR();
-              warmup.onstart = () => { try { warmup.abort(); } catch {} };
               warmup.onerror = () => {};
               warmup.onend = () => {};
               warmup.start();
+              setTimeout(() => { try { warmup.abort(); } catch {} }, 1500);
             } catch {}
           }
           overlay.remove();
@@ -3593,7 +3606,19 @@ if (destinationMarker) { destinationMarker.setMap(null); destinationMarker = nul
           if (raw) {
             const data = JSON.parse(decodeURIComponent(raw));
             history.replaceState(null, "", cleanUrl);
-            if (data.action === "reroute") setTimeout(() => startRerouteFlow(data), 3000);
+            if (data.action === "reroute") {
+              // TTS 모달이 열려 있으면 닫힐 때까지 대기 (마이크 권한 사전 획득 후 시작)
+              let ttsWait = 0;
+              const tryReroute = () => {
+                ttsWait += 600;
+                if (document.getElementById("ttsAllowBtn") && ttsWait < 15000) {
+                  setTimeout(tryReroute, 600);
+                } else {
+                  startRerouteFlow(data);
+                }
+              };
+              setTimeout(tryReroute, 1500);
+            }
           }
         } catch {}
       })();
