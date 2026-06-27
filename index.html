@@ -1690,10 +1690,14 @@
         }
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = "ko-KR";
-        utterance.rate = 0.95;
-        // 한국어 음성 명시 선택 (없으면 브라우저 기본값 사용)
-        const koVoice = voices.find((v) => /^ko/i.test(v.lang));
-        if (koVoice) utterance.voice = koVoice;
+        utterance.rate = 0.92;
+        utterance.pitch = 1.05;
+        // 고품질 온라인 음성 우선 선택 (Google > Microsoft Online > 그 외 한국어)
+        const koVoices = voices.filter((v) => /^ko/i.test(v.lang));
+        const preferred = koVoices.find((v) => /google|heami online|나나|유나/i.test(v.name))
+          || koVoices.find((v) => v.localService === false)
+          || koVoices[0];
+        if (preferred) utterance.voice = preferred;
         return new Promise((resolve) => {
           let done = false;
           const finish = () => { if (!done) { done = true; resolve(); } };
@@ -1709,11 +1713,21 @@
         const top = displayRows.slice(0, Math.min(5, displayRows.length));
         if (!top.length) return;
 
-        const nameList = top.map(({ item }, i) => `${i + 1}번, ${item.name}`).join(". ");
-        await speak(`${nameList}. 어디로 가시겠어요?`);
+        const ordinals = ["첫 번째", "두 번째", "세 번째", "네 번째", "다섯 번째"];
+        const nameList = top.map(({ item }, i) => `${ordinals[i]}, ${item.name}`).join(". ");
+        await speak(`추천 주차장입니다. ${nameList}. 어디로 가시겠어요?`);
+        await new Promise((r) => setTimeout(r, 500));
 
-        const heard = await listenForVoice(7000);
-        if (!heard) return;
+        searchFeedbackEl.textContent = "🎤 듣고 있어요...";
+        const heard = await listenForVoice(10000);
+        searchFeedbackEl.textContent = "";
+
+        if (!heard) {
+          const { item } = top[0];
+          await speak(`첫 번째 주차장으로 이동합니다.`);
+          startKakaoNavigation(item, null);
+          return;
+        }
 
         let idx = -1;
 
@@ -1740,9 +1754,7 @@
 
         if (idx >= 0 && idx < top.length) {
           const { item } = top[idx];
-          speak(`${item.name}으로 이동합니다.`);
-          setActiveView("map");
-          showParkingInfo(markers[idx], item);
+          startKakaoNavigation(item, null);
         }
       }
 
