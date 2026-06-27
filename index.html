@@ -2628,6 +2628,40 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
       async function loadParking() {
         const serviceKey = getServiceKey();
         activeServiceKey = serviceKey;
+
+        // 알림 탭으로 앱이 재시작됐고 최근 캐시가 있으면 초기화 없이 즉시 복원
+        const cachedRows = window.__notifCachedRows;
+        if (cachedRows) {
+          window.__notifCachedRows = null;
+          resultsEl.innerHTML = "";
+          stopRealtimeAutoRefresh();
+          try {
+            await loadClientConfig();
+            await loadKakaoSdk();
+            await refreshAllArduinoLots(cachedRows);
+            const decorated = decorateArduinoRows(cachedRows);
+            await renderParkingRows(decorated);
+            allParkingRows = decorated;
+            rememberRealtimeRows(decorated);
+            startArduinoStatusStream();
+            lastRealtimeChanges = new Map();
+            lastRealtimeChangeSummary = null;
+            const realtimeCount = decorated.filter((r) => r.realtimeAvailable != null).length;
+            renderSummary({ data: decorated, realtimeMatchedCount: realtimeCount });
+            setStatus("캐시 데이터로 지도를 표시했습니다. 잠시 후 실시간 정보를 갱신합니다.");
+            if (window.__pendingView) {
+              setActiveView(window.__pendingView);
+              window.__pendingView = null;
+            }
+            updateRefreshSchedule({});
+            startRealtimeAutoRefresh(serviceKey);
+            nextRealtimeRefreshAt = new Date(Date.now() + 60 * 1000); // 1분 후 즉시 갱신
+            return;
+          } catch {
+            // 캐시 경로 실패 → 정상 로드로 폴백
+          }
+        }
+
         resultsEl.innerHTML = "";
         stopRealtimeAutoRefresh();
 
@@ -2661,6 +2695,15 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
           const finalRows = decorateArduinoRows(payload.data || []);
           await renderParkingRows(finalRows);
           allParkingRows = finalRows;
+          // 알림 탭 재시작 대비 주차 데이터 캐시 저장
+          try {
+            localStorage.setItem("gwParkingCache", JSON.stringify({
+              rows: finalRows.map(({ managementNo, name, address, lat, lng, realtimeAvailable, realtimeTotal, total, operationSummary, arduinoLotId, slotLayout }) => ({
+                managementNo, name, address, lat, lng, realtimeAvailable, realtimeTotal, total, operationSummary, arduinoLotId, slotLayout,
+              })),
+              cachedAt: Date.now(),
+            }));
+          } catch {}
           rememberRealtimeRows(finalRows);
           startArduinoStatusStream();
           lastRealtimeChanges = new Map();
@@ -3528,6 +3571,16 @@ if (destinationMarker) { destinationMarker.setMap(null); destinationMarker = nul
           if (params.get("view") === "map") {
             window.__pendingView = "map";
             history.replaceState(null, "", cleanUrl);
+            // 최근 10분 이내 캐시가 있으면 전체 초기화 없이 즉시 복원
+            try {
+              const cacheRaw = localStorage.getItem("gwParkingCache");
+              if (cacheRaw) {
+                const cache = JSON.parse(cacheRaw);
+                if (cache.cachedAt && Date.now() - cache.cachedAt < 10 * 60 * 1000) {
+                  window.__notifCachedRows = cache.rows;
+                }
+              }
+            } catch {}
           }
 
           // ?pendingReroute=... → 경로 변경 플로우 실행
