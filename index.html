@@ -3505,16 +3505,6 @@ if (destinationMarker) { destinationMarker.setMap(null); destinationMarker = nul
       initVoiceInput();
       initDebugSlotToggle();
 
-      // 마이크 권한 즉시 요청 (로드 즉시 브라우저 권한 다이얼로그 표시)
-      (async function () {
-        try {
-          if (navigator.mediaDevices?.getUserMedia) {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            stream.getTracks().forEach((t) => t.stop());
-          }
-        } catch {}
-      })();
-
       // TTS 활성화: iOS/Android는 user gesture 없이 speak() 불가
       // 브라우저 권한 팝업과 동일한 스타일의 모달로 동의 유도
       (function initTtsActivation() {
