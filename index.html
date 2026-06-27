@@ -1153,6 +1153,51 @@
       .reroute-btn-yes { background: #1769e0; color: #fff; }
       .reroute-btn-no { background: var(--panel-soft); color: var(--ink); border: 1px solid var(--line); }
 
+      .debug-slot-toggle {
+        position: fixed;
+        bottom: 72px;
+        right: 12px;
+        z-index: 8888;
+        background: rgba(20,32,51,0.92);
+        color: #fff;
+        border-radius: 12px;
+        padding: 10px 14px;
+        font-size: 13px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+        min-width: 180px;
+      }
+      .debug-slot-toggle[hidden] { display: none; }
+      .debug-slot-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .debug-slot-label { font-size: 12px; color: #aab; }
+      .debug-slot-btn {
+        padding: 5px 12px;
+        border-radius: 8px;
+        border: none;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .debug-slot-btn.occupied { background: #e74c3c; color: #fff; }
+      .debug-slot-btn.vacant   { background: #27ae60; color: #fff; }
+      .debug-close {
+        align-self: flex-end;
+        font-size: 11px;
+        color: #778;
+        cursor: pointer;
+        background: none;
+        border: none;
+        color: #aab;
+        padding: 0;
+      }
+
     </style>
   </head>
   <body>
@@ -1258,6 +1303,15 @@
         <div class="map-loading">지도가 표시됩니다.</div>
       </section>
     </main>
+
+    <!-- 디버그: A11 슬롯 수동 토글 (브랜드 마크 5회 탭으로 활성화) -->
+    <div class="debug-slot-toggle" id="debugSlotToggle" hidden>
+      <div class="debug-slot-row">
+        <span class="debug-slot-label">A11 (주차장6)</span>
+        <button class="debug-slot-btn" id="debugSlotBtn">--</button>
+      </div>
+      <button class="debug-close" id="debugSlotClose">닫기</button>
+    </div>
 
     <!-- 만차 → 경로 변경 모달 -->
     <div class="reroute-overlay" id="rerouteOverlay" hidden aria-modal="true" role="dialog">
@@ -2013,6 +2067,65 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
         } catch (error) {
           searchFeedbackEl.textContent = error.message;
         }
+      }
+
+      // ── 디버그: A11 슬롯 수동 토글 ─────────────────────────
+      function initDebugSlotToggle() {
+        const brandMark = document.querySelector(".brand-mark");
+        const panel     = document.getElementById("debugSlotToggle");
+        const btn       = document.getElementById("debugSlotBtn");
+        const closeBtn  = document.getElementById("debugSlotClose");
+        if (!brandMark || !panel || !btn || !closeBtn) return;
+
+        const LOT_ID  = "KNU_PARKING_6";
+        const SLOT_NO = 11;
+        let tapCount  = 0;
+        let tapTimer  = null;
+        let isOccupied = null; // 현재 상태 (null=미조회)
+
+        function updateBtn() {
+          if (isOccupied === null) { btn.textContent = "조회 중…"; btn.className = "debug-slot-btn"; return; }
+          btn.textContent   = isOccupied ? "주차중 → 빈칸으로" : "빈칸 → 주차중으로";
+          btn.className     = `debug-slot-btn ${isOccupied ? "occupied" : "vacant"}`;
+        }
+
+        async function fetchState() {
+          try {
+            const res = await fetch(`${parkingBackendOrigin}/api/arduino/slots/${LOT_ID}`);
+            const data = await res.json();
+            const slot = (data.slots || []).find((s) => s.slot_no === SLOT_NO || s.slotNo === SLOT_NO);
+            isOccupied = slot ? Boolean(slot.is_occupied ?? slot.isOccupied) : false;
+          } catch { isOccupied = false; }
+          updateBtn();
+        }
+
+        async function toggleSlot() {
+          btn.disabled = true;
+          try {
+            await fetch(`${parkingBackendOrigin}/api/arduino/slot`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ lot_id: LOT_ID, slot_no: SLOT_NO, is_occupied: !isOccupied }),
+            });
+            isOccupied = !isOccupied;
+          } catch { /* 실패해도 UI 유지 */ }
+          btn.disabled = false;
+          updateBtn();
+        }
+
+        brandMark.addEventListener("click", () => {
+          tapCount++;
+          clearTimeout(tapTimer);
+          tapTimer = setTimeout(() => { tapCount = 0; }, 1200);
+          if (tapCount >= 5) {
+            tapCount = 0;
+            panel.hidden = false;
+            fetchState();
+          }
+        });
+
+        btn.addEventListener("click", toggleSlot);
+        closeBtn.addEventListener("click", () => { panel.hidden = true; });
       }
 
       function initVoiceInput() {
@@ -3063,6 +3176,7 @@ if (destinationMarker) { destinationMarker.setMap(null); destinationMarker = nul
       });
 
       initVoiceInput();
+      initDebugSlotToggle();
       registerParkingServiceWorker().catch((error) => {
         if (!activePushWatchId) updatePushWatchStatus(error.message);
       });
