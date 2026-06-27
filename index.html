@@ -55,7 +55,11 @@
       .app.view-home .sidebar {
         max-width: 480px;
         min-height: calc(100vh - 76px);
+        max-height: calc(100vh - 76px);
+        max-height: calc(100dvh - 76px);
         margin: 0 auto;
+        overflow-y: auto;
+        overscroll-behavior: contain;
         border-right: 0;
       }
 
@@ -64,15 +68,60 @@
       }
 
       .app.view-map {
+        height: 100vh;
+        height: 100dvh;
+        min-height: 100vh;
+        min-height: 100dvh;
+        overflow: hidden;
         grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: repeat(2, minmax(0, 1fr));
       }
 
       .app.view-map .sidebar {
+        display: flex;
+        grid-row: 2;
+        min-height: 0;
+        max-height: none;
+        flex-direction: column;
+        overflow: hidden;
+        padding: 12px 14px 0;
+        border-top: 1px solid var(--line);
+        border-right: 0;
+      }
+
+      .app.view-map .sidebar > :not(.section-title):not(.results) {
         display: none;
       }
 
+      .app.view-map .section-title {
+        flex: 0 0 auto;
+        margin: 0 2px 10px;
+      }
+
+      .app.view-map .results {
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+        min-height: 0;
+        flex: 1 1 auto;
+        overflow-y: auto;
+        padding: 0 2px 16px;
+        overscroll-behavior: contain;
+        scrollbar-gutter: stable;
+        touch-action: pan-y;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .app.view-map .map-wrap {
+        grid-row: 1;
+        min-height: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
       .app.view-map #map {
-        height: calc(100vh - 76px);
+        height: 100%;
+      }
+
+      .map-list-resizer {
+        display: none;
       }
 
       .sidebar {
@@ -115,7 +164,6 @@
       .hint,
       .status,
       .result-item span,
-      .summary,
       .metric span,
       .map-chip,
       .panel-meta {
@@ -320,9 +368,7 @@
       }
 
 
-      .control-panel,
-      .summary,
-      .api-responses {
+      .control-panel {
         border: 1px solid var(--line);
         border-radius: 8px;
         background: var(--panel);
@@ -433,8 +479,7 @@
         line-height: 1;
       }
 
-      .status,
-      .summary {
+      .status {
         margin: 14px 0;
         padding: 12px;
       }
@@ -443,26 +488,6 @@
         border: 1px solid rgba(23, 105, 224, 0.2);
         border-radius: 8px;
         background: #f4f8ff;
-      }
-
-      .summary {
-        background: var(--panel);
-      }
-
-      .summary > summary {
-        cursor: pointer;
-        font-size: 13px;
-        font-weight: 600;
-        color: var(--ink);
-        padding: 2px 0 6px;
-        list-style: revert;
-      }
-
-      .summary strong {
-        display: block;
-        margin-bottom: 5px;
-        color: var(--ink);
-        font-size: 14px;
       }
 
       .section-title {
@@ -483,46 +508,32 @@
         font-size: 12px;
       }
 
-      .api-responses {
-        margin: 10px 0;
-        padding: 11px 12px;
-        background: #fff;
-      }
-
-      .api-responses summary {
-        cursor: pointer;
-        font-size: 13px;
-        font-weight: 800;
-      }
-
-      .api-responses pre {
-        overflow: auto;
-        max-height: 280px;
-        margin: 12px 0 0;
-        padding: 12px;
-        border-radius: 6px;
-        background: #101828;
-        color: #e9f1fb;
-        font-size: 12px;
-        line-height: 1.5;
-        white-space: pre-wrap;
-        word-break: break-word;
-      }
-
       .results {
         display: grid;
+        grid-auto-rows: max-content;
+        align-content: start;
         gap: 8px;
         padding-bottom: 18px;
+      }
+
+      .result-entry {
+        display: grid;
+        min-width: 0;
+        gap: 6px;
       }
 
       .result-item {
         position: relative;
         display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        align-content: start;
         gap: 5px;
         width: 100%;
         height: auto;
         min-height: 82px;
         padding: 12px 60px 12px 16px;
+        overflow: visible;
+        white-space: normal;
         text-align: left;
         border: 1px solid var(--line);
         border-left-width: 4px;
@@ -532,7 +543,35 @@
         box-shadow: 0 1px 0 rgba(20, 32, 51, 0.04);
       }
 
+      .result-item > * {
+        min-width: 0;
+      }
+
+      .result-title-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        color: #172236;
+      }
+
+      .recommendation-rank {
+        display: inline-grid;
+        flex: 0 0 24px;
+        width: 24px;
+        height: 24px;
+        place-items: center;
+        border-radius: 50%;
+        background: var(--blue);
+        color: #fff;
+        font-size: 12px;
+        font-weight: 900;
+        line-height: 1;
+      }
+
       .result-reason {
+        display: block;
+        box-sizing: border-box;
+        width: 100%;
         margin: 4px 0 0;
         padding: 7px 9px;
         border-radius: 6px;
@@ -540,6 +579,38 @@
         color: var(--ink);
         font-size: 12px;
         line-height: 1.6;
+        overflow-wrap: anywhere;
+        word-break: keep-all;
+        white-space: normal;
+      }
+
+      .navigation-button {
+        display: inline-flex;
+        width: 100%;
+        min-height: 42px;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        border: 1px solid #e4ce00;
+        border-radius: 8px;
+        background: #fee500;
+        color: #191919;
+        font-size: 13px;
+        font-weight: 850;
+      }
+
+      .navigation-button:hover {
+        background: #f7df00;
+      }
+
+      .navigation-button:focus-visible {
+        outline: 3px solid rgba(23, 105, 224, 0.3);
+        outline-offset: 2px;
+      }
+
+      .navigation-button:disabled {
+        cursor: wait;
+        opacity: 0.65;
       }
 
       .result-item:hover {
@@ -725,6 +796,49 @@
         color: #fff;
       }
 
+      @media (max-width: 768px) {
+        .app.view-map {
+          grid-template-rows:
+            minmax(0, calc(var(--mobile-map-split, 50%) - 12px))
+            24px
+            minmax(0, 1fr);
+        }
+
+        .app.view-map .map-wrap {
+          grid-row: 1;
+        }
+
+        .app.view-map .map-list-resizer {
+          display: flex;
+          grid-row: 2;
+          align-items: center;
+          justify-content: center;
+          border: 0;
+          border-top: 1px solid var(--line);
+          border-bottom: 1px solid var(--line);
+          background: #f5f8fb;
+          cursor: row-resize;
+          touch-action: none;
+        }
+
+        .app.view-map .map-list-resizer::before {
+          width: 44px;
+          height: 4px;
+          border-radius: 999px;
+          background: #9aa9b8;
+          content: "";
+        }
+
+        .app.view-map .map-list-resizer:focus-visible {
+          outline: 3px solid rgba(23, 105, 224, 0.35);
+          outline-offset: -3px;
+        }
+
+        .app.view-map .sidebar {
+          grid-row: 3;
+        }
+      }
+
     </style>
   </head>
   <body>
@@ -788,15 +902,6 @@
         <div class="status" id="status">
           강릉 실시간 주차 정보를 자동으로 불러오는 중입니다.
         </div>
-        <details class="summary" id="summary" hidden></details>
-        <details class="api-responses" id="gangneungInfoResponses" hidden>
-          <summary>getParkInfo 강릉시 주차장 정보 API 응답</summary>
-          <pre id="gangneungInfoResponseJson"></pre>
-        </details>
-        <details class="api-responses" id="gangneungRealtimeResponses" hidden>
-          <summary>getParkRltm 강릉시 실시간 주차 API 응답</summary>
-          <pre id="gangneungRealtimeResponseJson"></pre>
-        </details>
         <div class="section-title">
           <div>
             <h2 style="margin:0">추천 주차장</h2>
@@ -805,6 +910,19 @@
         </div>
         <section class="results" id="results" aria-live="polite"></section>
       </aside>
+
+      <div
+        class="map-list-resizer"
+        id="mapListResizer"
+        role="separator"
+        aria-label="지도와 추천 주차장 높이 조절"
+        aria-orientation="horizontal"
+        aria-valuemin="30"
+        aria-valuemax="70"
+        aria-valuenow="50"
+        aria-valuetext="지도 50%, 추천 주차장 50%"
+        tabindex="0"
+      ></div>
 
       <section class="map-wrap" id="mapWrap">
         <div id="map"></div>
@@ -834,12 +952,13 @@
     <script>
       const DEFAULT_POSITION = { lat: 37.8228, lng: 128.1555 };
       const REALTIME_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
-      const ARDUINO_BACKEND_ORIGIN = "http://localhost:3001";
+      const ARDUINO_BACKEND_ORIGIN = `${window.location.protocol}//${window.location.hostname}:3001`;
       const KNU_PARKING_LOT_ID = "KNU_PARKING_6";
       const VIRTUAL_SLOT_COUNT = 12;
+      const KAKAO_JS_SDK_URL = "https://t1.kakaocdn.net/kakao_js_sdk/2.8.1/kakao.min.js";
+      const KAKAO_JS_SDK_INTEGRITY = "sha384-OL+ylM/iuPLtW5U3XcvLSGhE8JzReKDank5InqlHGWPhb4140/yrBw0bg0y7+C9J";
 
       let map;
-      let infoWindow;
       let centerMarker;
       let geocoder;
       let lastRenderedMarkerCount = 0;
@@ -859,19 +978,22 @@
       let lastRealtimeChanges = new Map();
       let lastRealtimeChangeSummary = null;
       let kakaoSdkLoadingPromise = null;
+      let kakaoNaviSdkLoadingPromise = null;
       const parkingMarkers = [];
       const geocodeCache = new Map();
       let destinationMarker = null;
       let lastDestination = null;
 
-      function makeMarkerImage(color, isDestination = false) {
-        const w = 28, h = 36;
-        const inner = isDestination
-          ? `<text x="14" y="21" text-anchor="middle" font-family="sans-serif" font-size="14" font-weight="bold" fill="white">★</text>`
-          : `<circle cx="14" cy="14" r="6" fill="white" opacity="0.35"/>`;
-        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.3 21.7 0 14 0z" fill="${color}"/>${inner}</svg>`;
+      function makeMarkerImage(color, label = "") {
+        const w = 32, h = 40;
+        const safeLabel = String(label || "").replace(/[^0-9A-Z]/g, "").slice(0, 2);
+        const fontSize = safeLabel.length > 1 ? 11 : 14;
+        const inner = safeLabel
+          ? `<circle cx="16" cy="15" r="10" fill="white"/><text x="16" y="20" text-anchor="middle" font-family="sans-serif" font-size="${fontSize}" font-weight="900" fill="${color}">${safeLabel}</text>`
+          : `<circle cx="16" cy="15" r="6" fill="white" opacity="0.35"/>`;
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><path d="M16 0C7.2 0 0 7.2 0 16c0 11.5 16 24 16 24s16-12.5 16-24C32 7.2 24.8 0 16 0z" fill="${color}"/>${inner}</svg>`;
         const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
-        return new kakao.maps.MarkerImage(url, new kakao.maps.Size(w, h), { offset: new kakao.maps.Point(14, h) });
+        return new kakao.maps.MarkerImage(url, new kakao.maps.Size(w, h), { offset: new kakao.maps.Point(16, h) });
       }
 
       function congestionBadge(item, extra = "") {
@@ -893,19 +1015,6 @@
       const mapWrapEl = document.querySelector("#mapWrap");
       const appShellEl = document.querySelector("#appShell");
       const statusEl = document.querySelector("#status");
-      const summaryEl = document.querySelector("#summary");
-const gangneungInfoResponsesEl = document.querySelector(
-        "#gangneungInfoResponses",
-      );
-      const gangneungInfoResponseJsonEl = document.querySelector(
-        "#gangneungInfoResponseJson",
-      );
-      const gangneungRealtimeResponsesEl = document.querySelector(
-        "#gangneungRealtimeResponses",
-      );
-      const gangneungRealtimeResponseJsonEl = document.querySelector(
-        "#gangneungRealtimeResponseJson",
-      );
       const resultsEl = document.querySelector("#results");
       const destinationInput = document.querySelector("#destinationInput");
       const destinationSearchButton = document.querySelector("#destinationSearchButton");
@@ -915,12 +1024,60 @@ const gangneungInfoResponsesEl = document.querySelector(
       const metricRealtimeEl = document.querySelector("#metricRealtime");
       const metricRefreshEl = document.querySelector("#metricRefresh");
       const parkingPanelEl = document.querySelector("#parkingPanel");
+      const mapListResizerEl = document.querySelector("#mapListResizer");
       const tabButtons = [...document.querySelectorAll(".tab-button")];
       let clientKakaoKey = "";
       let latestMapBounds = null;
+      let mobileMapSplitPercent = 50;
 
       function setStatus(message) {
         statusEl.textContent = message;
+      }
+
+      function setMobileMapSplit(percent) {
+        mobileMapSplitPercent = Math.min(70, Math.max(30, Math.round(percent)));
+        appShellEl.style.setProperty("--mobile-map-split", `${mobileMapSplitPercent}%`);
+        mapListResizerEl.setAttribute("aria-valuenow", String(mobileMapSplitPercent));
+        mapListResizerEl.setAttribute(
+          "aria-valuetext",
+          `지도 ${mobileMapSplitPercent}%, 추천 주차장 ${100 - mobileMapSplitPercent}%`,
+        );
+        if (map) {
+          requestAnimationFrame(() => map.relayout());
+        }
+      }
+
+      function updateMobileMapSplitFromPointer(clientY) {
+        const appRect = appShellEl.getBoundingClientRect();
+        const paddingBottom = parseFloat(getComputedStyle(appShellEl).paddingBottom) || 0;
+        const contentHeight = Math.max(1, appRect.height - paddingBottom);
+        setMobileMapSplit(((clientY - appRect.top) / contentHeight) * 100);
+      }
+
+      function initMapListResizer() {
+        mapListResizerEl.addEventListener("pointerdown", (event) => {
+          mapListResizerEl.setPointerCapture(event.pointerId);
+          updateMobileMapSplitFromPointer(event.clientY);
+        });
+        mapListResizerEl.addEventListener("pointermove", (event) => {
+          if (!mapListResizerEl.hasPointerCapture(event.pointerId)) return;
+          updateMobileMapSplitFromPointer(event.clientY);
+        });
+        mapListResizerEl.addEventListener("keydown", (event) => {
+          if (event.key === "ArrowUp") {
+            event.preventDefault();
+            setMobileMapSplit(mobileMapSplitPercent - 5);
+          } else if (event.key === "ArrowDown") {
+            event.preventDefault();
+            setMobileMapSplit(mobileMapSplitPercent + 5);
+          } else if (event.key === "Home") {
+            event.preventDefault();
+            setMobileMapSplit(30);
+          } else if (event.key === "End") {
+            event.preventDefault();
+            setMobileMapSplit(70);
+          }
+        });
       }
 
       function setActiveView(view) {
@@ -1191,11 +1348,11 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
           destinationMarker = new kakao.maps.Marker({
             position: new kakao.maps.LatLng(destination.lat, destination.lng),
             map,
-            image: makeMarkerImage('#1769e0', true),
+            image: makeMarkerImage('#1769e0', "D"),
             zIndex: 10,
           });
-          if (top3[0]) renderParkingPanel(top3[0]);
-          setActiveView("home");
+          setActiveView("map");
+          if (top3[0]) showParkingInfo(parkingMarkers[0], top3[0]);
           searchFeedbackEl.textContent = `${destination.name} 기준 AI 추천: ${preferenceLabel(parsed.preference)}.`;
           setStatus(`AI가 ${destination.name} 주변 추천 주차장 상위 3개를 표시했습니다.`);
         } catch (error) {
@@ -1308,6 +1465,74 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
         return kakaoSdkLoadingPromise;
       }
 
+      async function loadKakaoNaviSdk() {
+        await loadClientConfig();
+        if (!clientKakaoKey) {
+          throw new Error("Kakao JavaScript key is required.");
+        }
+        if (window.Kakao?.Navi) {
+          if (!window.Kakao.isInitialized()) window.Kakao.init(clientKakaoKey);
+          return window.Kakao;
+        }
+        if (kakaoNaviSdkLoadingPromise) return kakaoNaviSdkLoadingPromise;
+
+        kakaoNaviSdkLoadingPromise = new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = KAKAO_JS_SDK_URL;
+          script.integrity = KAKAO_JS_SDK_INTEGRITY;
+          script.crossOrigin = "anonymous";
+          script.async = true;
+          script.onload = () => {
+            if (!window.Kakao?.Navi) {
+              kakaoNaviSdkLoadingPromise = null;
+              reject(new Error("Kakao Navi SDK object was not found."));
+              return;
+            }
+            if (!window.Kakao.isInitialized()) window.Kakao.init(clientKakaoKey);
+            resolve(window.Kakao);
+          };
+          script.onerror = () => {
+            kakaoNaviSdkLoadingPromise = null;
+            reject(new Error("Failed to load Kakao Navi SDK."));
+          };
+          document.head.appendChild(script);
+        });
+
+        return kakaoNaviSdkLoadingPromise;
+      }
+
+      async function startKakaoNavigation(item, button) {
+        const lat = Number(item?.lat);
+        const lng = Number(item?.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+          setStatus("길찾기에 사용할 주차장 좌표가 없습니다.");
+          return;
+        }
+
+        const originalContent = button.innerHTML;
+        button.disabled = true;
+        button.textContent = "카카오내비 연결 중";
+        try {
+          const KakaoSdk = await loadKakaoNaviSdk();
+          const destination = {
+            name: item.name || "주차장",
+            x: lng,
+            y: lat,
+            coordType: "wgs84",
+          };
+          window.__parkingDebug.lastNaviRequest = destination;
+          KakaoSdk.Navi.start(destination);
+          setStatus(`${destination.name}으로 카카오내비 길안내를 시작합니다.`);
+        } catch (error) {
+          setStatus(`카카오내비를 실행하지 못했습니다. ${error.message}`);
+        } finally {
+          setTimeout(() => {
+            button.disabled = false;
+            button.innerHTML = originalContent;
+          }, 1200);
+        }
+      }
+
       function initMap() {
         const center = new kakao.maps.LatLng(
           DEFAULT_POSITION.lat,
@@ -1318,7 +1543,6 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
           level: 10,
         });
         map.setMapTypeId(kakao.maps.MapTypeId.ROADMAP);
-        infoWindow = new kakao.maps.InfoWindow({ removable: true, zIndex: 100 });
         geocoder = new kakao.maps.services.Geocoder();
         centerMarker = new kakao.maps.Marker({ position: center, map });
         mapWrapEl.classList.add("map-ready");
@@ -1332,8 +1556,6 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
       async function loadParking() {
         const serviceKey = getServiceKey();
         activeServiceKey = serviceKey;
-        summaryEl.hidden = true;
-        clearApiResponses();
         resultsEl.innerHTML = "";
         stopRealtimeAutoRefresh();
 
@@ -1476,95 +1698,10 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
       }
 
       function renderSummary(payload) {
-        summaryEl.hidden = false;
         metricLotsEl.textContent = formatNumber(payload.data?.length || 0);
         metricRealtimeEl.textContent = formatNumber(payload.realtimeMatchedCount || 0);
         metricRefreshEl.textContent = formatCountdown(payload.nextRealtimeRefreshAt);
-        summaryEl.innerHTML = `
-          <summary>데이터 수집 현황</summary>
-          <div>수집 주차장: ${formatNumber(payload.gangneungInfoCount)}건 / 실시간 매칭: ${formatNumber(payload.realtimeMatchedCount)}건</div>
-          <div>지도 표시: ${formatNumber(payload.data?.length || 0)}건</div>
-          <div>대상 지역: ${escapeHtml(payload.targetRegion || "강원")}</div>
-          <div>실시간 갱신 주기: 5분</div>
-          <div>마지막 갱신: ${escapeHtml(formatDateTime(payload.lastRealtimeRefreshedAt))}</div>
-          <div>다음 갱신 예정: ${escapeHtml(formatDateTime(payload.nextRealtimeRefreshAt))}</div>
-          <div>다음 갱신까지: <strong id="refreshCountdown">${escapeHtml(formatCountdown(payload.nextRealtimeRefreshAt))}</strong></div>
-          <div>최근 자리수 변경: ${escapeHtml(formatServerComparison(payload.gangneungRealtimeComparison) || formatChangeSummary())}</div>
-          <div>첫 호출 대비: ${escapeHtml(formatServerComparison(payload.gangneungRealtimeBaselineComparison) || "-")}</div>
-        `;
-        renderApiResponses(payload.data || []);
         updateRefreshSchedule(payload);
-      }
-
-      function renderApiResponses(rows) {
-        const gangneungEntries = rows.flatMap((row) =>
-          (row.sourceEntries || [])
-            .filter((entry) => entry.apiSource === "15140011")
-            .map((entry) => ({ row, entry })),
-        );
-        renderApiResponseSection({
-          detailsEl: gangneungInfoResponsesEl,
-          preEl: gangneungInfoResponseJsonEl,
-          sourceApi: "getParkInfo",
-          rows: gangneungEntries
-            .filter(({ entry }) => entry.raw?.getParkInfo)
-            .map(({ row, entry }) =>
-              baseApiRow(row, entry, { getParkInfo: entry.raw.getParkInfo }),
-            ),
-        });
-        renderApiResponseSection({
-          detailsEl: gangneungRealtimeResponsesEl,
-          preEl: gangneungRealtimeResponseJsonEl,
-          sourceApi: "getParkRltm",
-          rows: gangneungEntries
-            .filter(({ entry }) => entry.raw?.getParkRltm)
-            .map(({ row, entry }) =>
-              baseApiRow(row, entry, { getParkRltm: entry.raw.getParkRltm }),
-            ),
-        });
-      }
-
-      function baseApiRow(row, entry, apiPayload) {
-        return {
-          sourceApi: entry.sourceApi,
-          sourceId: entry.sourceId,
-          apiSource: entry.apiSource,
-          parkingName: entry.name || row.name,
-          address: entry.address || row.address,
-          mergedAddressKey: row.key,
-          ...apiPayload,
-        };
-      }
-
-      function renderApiResponseSection({ detailsEl, preEl, sourceApi, rows }) {
-        if (!rows.length) {
-          detailsEl.hidden = true;
-          preEl.textContent = "";
-          return;
-        }
-
-        detailsEl.hidden = false;
-        preEl.textContent = JSON.stringify(
-          {
-            resultCode: "00",
-            resultMsg: "SUCCESS",
-            matchedCount: rows.length,
-            sourceApi,
-            data: rows,
-          },
-          null,
-          2,
-        );
-      }
-
-      function clearApiResponses() {
-        [
-          [gangneungInfoResponsesEl, gangneungInfoResponseJsonEl],
-          [gangneungRealtimeResponsesEl, gangneungRealtimeResponseJsonEl],
-        ].forEach(([detailsEl, preEl]) => {
-          detailsEl.hidden = true;
-          preEl.textContent = "";
-        });
       }
 
       function formatPhase(phase) {
@@ -1607,15 +1744,22 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
         }
 
         const displayRows = spreadOverlappingPositions(resolvedRows);
-        for (const { item, position } of displayRows) {
+        for (let index = 0; index < displayRows.length; index += 1) {
+          const { item, position } = displayRows[index];
+          const recommendationRank = Number.isFinite(item.destinationDistanceM) ? index + 1 : null;
           window.__parkingDebug.positions.push({
             name: item.name,
             address: item.address,
             lat: position.getLat(),
             lng: position.getLng(),
             source: item.coordinateSource,
+            recommendationRank,
           });
-          const marker = new kakao.maps.Marker({ position, map, image: makeMarkerImage(parkingMarkerColor(item)) });
+          const marker = new kakao.maps.Marker({
+            position,
+            map,
+            image: makeMarkerImage(parkingMarkerColor(item), recommendationRank || ""),
+          });
           parkingMarkers.push(marker);
           bounds.extend(position);
           kakao.maps.event.addListener(marker, "click", () =>
@@ -1632,8 +1776,9 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
         }
 
         displayRows.slice(0, 100).forEach(({ item }, index) => {
+          const recommendationRank = Number.isFinite(item.destinationDistanceM) ? index + 1 : null;
           resultsEl.appendChild(
-            createResultButton(item, parkingMarkers[index], reasons.get(item.managementNo)),
+            createResultButton(item, parkingMarkers[index], reasons.get(item.managementNo), recommendationRank),
           );
         });
 
@@ -1761,32 +1906,54 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
         });
       }
 
-      function createResultButton(item, marker, reason) {
+      function createResultButton(item, marker, reason, recommendationRank = null) {
         const button = document.createElement("button");
         button.type = "button";
         button.className = "result-item";
         button.dataset.managementNo = item.managementNo || "";
+        if (recommendationRank) button.dataset.recommendationRank = String(recommendationRank);
         button.style.borderLeftColor = parkingMarkerColor(item);
         const operationText = item.operationSummary || "";
         const distanceText = formatDestinationDistance(item.destinationDistanceM);
         button.innerHTML = `
-          <strong>${escapeHtml(item.name || "주차장")}</strong>
+          <span class="result-title-row">
+            ${recommendationRank ? `<span class="recommendation-rank" aria-label="추천 ${recommendationRank}순위">${recommendationRank}</span>` : ""}
+            <strong>${escapeHtml(item.name || "주차장")}</strong>
+          </span>
           ${congestionBadge(item)}
           <span data-slot-display>여유 ${escapeHtml(item.realtimeAvailable || "-")} / 총 ${escapeHtml(item.realtimeTotal || item.total || "-")}면 ${escapeHtml(formatItemDelta(item))}</span>
           ${distanceText ? `<span>목적지까지 ${escapeHtml(distanceText)} · AI 기준: ${escapeHtml(preferenceLabel(item.recommendationPreference))}</span>` : ""}
           <span>${escapeHtml(item.address || "주소 없음")}</span>
           ${operationText ? `<span>${escapeHtml(operationText)}</span>` : ""}
-          ${reason ? `<p class="result-reason">${escapeHtml(reason)}</p>` : ""}
+          ${reason ? `<span class="result-reason">${escapeHtml(reason)}</span>` : ""}
         `;
         button.addEventListener("click", () => {
           setActiveView("map");
           showParkingInfo(marker, item);
-          setTimeout(() => {
-            map.setCenter(marker.getPosition());
-            map.setLevel(4);
-          }, 100);
         });
-        return button;
+
+        if (!recommendationRank) return button;
+
+        const entry = document.createElement("div");
+        entry.className = "result-entry";
+        entry.appendChild(button);
+
+        const lat = Number(item.lat);
+        const lng = Number(item.lng);
+        if (Number.isFinite(lat) && Number.isFinite(lng)) {
+          const navigationButton = document.createElement("button");
+          navigationButton.type = "button";
+          navigationButton.className = "navigation-button";
+          navigationButton.dataset.destinationName = item.name || "주차장";
+          navigationButton.dataset.destinationLat = String(lat);
+          navigationButton.dataset.destinationLng = String(lng);
+          navigationButton.setAttribute("aria-label", `${item.name || "주차장"} 카카오내비 길찾기`);
+          navigationButton.innerHTML = `<span aria-hidden="true">&#8599;</span><span>길찾기</span>`;
+          navigationButton.addEventListener("click", () => startKakaoNavigation(item, navigationButton));
+          entry.appendChild(navigationButton);
+        }
+
+        return entry;
       }
 
       function formatDestinationDistance(distanceM) {
@@ -1802,23 +1969,37 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
         if (card) card.classList.add("selected");
       }
 
+      function focusParkingMarker(marker) {
+        if (!marker || !map) return;
+        setTimeout(() => {
+          map.relayout();
+          map.setLevel(4);
+          map.setCenter(marker.getPosition());
+
+          const mapRect = mapWrapEl.getBoundingClientRect();
+          const panelRect = parkingPanelEl.getBoundingClientRect();
+          const toolbarRect = mapWrapEl.querySelector(".map-toolbar")?.getBoundingClientRect();
+          const visibleTop = toolbarRect
+            ? Math.max(0, Math.min(mapRect.height, toolbarRect.bottom - mapRect.top + 8))
+            : 0;
+          const visibleBottom = Math.max(
+            0,
+            Math.min(mapRect.height, panelRect.top - mapRect.top),
+          );
+          const targetY = visibleBottom > visibleTop
+            ? visibleTop + (visibleBottom - visibleTop) / 2
+            : mapRect.height / 2;
+          const offsetY = Math.max(0, mapRect.height / 2 - targetY);
+          if (offsetY > 1) map.panBy(0, Math.round(offsetY));
+        }, 120);
+      }
+
       function showParkingInfo(marker, item) {
         const decoratedItem = decorateArduinoItem(item);
-        const operationRows = formatOperationRows(item);
-        const sourceRows = formatSourceRows(item, true);
         activeParkingItem = decoratedItem;
         setSelectedResultCard(decoratedItem.managementNo);
         renderParkingPanel(decoratedItem);
-        infoWindow.setContent(`
-          <div style="position:relative;padding:12px 14px;width:240px;font-size:13px;line-height:1.55;word-break:keep-all;overflow-wrap:anywhere">
-            ${congestionBadge(decoratedItem, "info-congestion-badge")}
-            <strong style="display:block;margin-bottom:4px">${escapeHtml(decoratedItem.name || "주차장")}</strong>
-            <span>여유 ${escapeHtml(decoratedItem.realtimeAvailable || "-")} / 총 ${escapeHtml(decoratedItem.realtimeTotal || decoratedItem.total || "-")}면 ${escapeHtml(formatItemDelta(decoratedItem))}</span><br>
-            ${operationRows}
-            <span>${escapeHtml(decoratedItem.address || "")}</span>
-          </div>
-        `);
-        infoWindow.open(map, marker);
+        focusParkingMarker(marker);
       }
 
       function renderArduinoSlotBoard(item) {
@@ -2146,6 +2327,7 @@ if (destinationMarker) { destinationMarker.setMap(null); destinationMarker = nul
       tabButtons.forEach((button) => {
         button.addEventListener("click", () => setActiveView(button.dataset.view));
       });
+      initMapListResizer();
 
       destinationSearchButton.addEventListener("click", applyDestinationSearch);
       destinationInput.addEventListener("keydown", (event) => {

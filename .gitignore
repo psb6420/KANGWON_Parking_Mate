@@ -7,3 +7,5 @@ backend/*.db-wal
 backend/node_modules/
 parking-cache.json
 reasons-cache.json
+__pycache__/
+*.pyc
