@@ -8,6 +8,7 @@ the Express backend so the web app can read the saved DB state.
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import json
+import os
 import sys
 import urllib.error
 import urllib.request
@@ -21,7 +22,10 @@ except Exception:
 
 app = FastAPI()
 
-EXPRESS_BACKEND_STATUS_URL = "http://localhost:3001/api/parking/status"
+_BACKEND_ORIGIN = os.getenv(
+    "BACKEND_URL", "https://gangwon-parking-backend.fly.dev"
+).rstrip("/")
+EXPRESS_BACKEND_STATUS_URL = f"{_BACKEND_ORIGIN}/api/parking/status"
 TARGET_A1_PARKING_ID = "KNU_PARKING_6_A1"
 
 

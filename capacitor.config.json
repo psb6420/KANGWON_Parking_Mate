@@ -1,0 +1,17 @@
+{
+  "appId": "com.gangwon.parkingmate",
+  "appName": "Gangwon Parking Mate",
+  "webDir": "www",
+  "server": {
+    "hostname": "localhost",
+    "androidScheme": "https",
+    "cleartext": true
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1200,
+      "backgroundColor": "#eef3f8",
+      "showSpinner": false
+    }
+  }
+}
