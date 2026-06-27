@@ -680,20 +680,14 @@ async function analyzeParkingReasons(destination, lots) {
   if (!apiKey) return { reasons: [] };
 
   const lotsText = lots
-    .map((lot) => {
-      const avail = Number(lot.realtimeAvailable);
-      const total = Number(lot.realtimeTotal);
-      const used = Number.isFinite(avail) && Number.isFinite(total) ? total - avail : null;
-      const occupancy = used !== null ? `빈자리 ${avail}면, 사용중 ${used}면, 전체 ${total}면` : `전체 ${lot.realtimeTotal}면`;
-      return `managementNo=${lot.managementNo} | ${lot.name} (${occupancy}, 거리 ${Math.round(lot.destinationDistanceM || 0)}m)`;
-    })
+    .map((lot) => `managementNo=${lot.managementNo} | ${lot.name} (거리 ${Math.round(lot.destinationDistanceM || 0)}m)`)
     .join("\n");
 
   const prompt = [
     "너는 강원 Parking Mate의 주차장 추천 이유 생성기다.",
     `목적지: ${destination}`,
     `아래 주차장 목록 ${lots.length}개 전부에 대해 각각 1~2문장의 추천 이유를 한국어로 작성해라.`,
-    "가용 주차면 수와 목적지까지의 거리를 근거로 설명해라.",
+    "목적지까지의 도보 거리와 주차장 위치·접근성을 근거로 설명해라. 잔여면수 등 실시간 데이터는 언급하지 마라.",
     `반드시 JSON만 반환해라. reasons 배열에 반드시 ${lots.length}개 항목이 있어야 한다.`,
     "형식: {\"reasons\":[{\"managementNo\":\"...\",\"reason\":\"...\"},...]}",
     "각 항목의 managementNo는 입력 데이터의 managementNo= 값을 그대로 복사해라. 절대 바꾸지 마라.",
