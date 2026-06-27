@@ -1854,21 +1854,25 @@
         // 🎤 말하기: STT만
         if (btnMic) btnMic.onclick = runVoice;
 
-        // 🔊 다시 듣기: TTS → STT (user gesture → 모바일에서도 확실히 작동)
+        // 🔊 다시 듣기: TTS만 재생 (STT는 user gesture인 🎤 버튼으로만 시작)
         const runTtsAndVoice = async () => {
           if (btnTts) btnTts.disabled = true;
           if (btnMic) btnMic.disabled = true;
           await speak(question);
-          await new Promise((r) => setTimeout(r, 400));
           if (btnTts) btnTts.disabled = false;
-          await runVoice();
+          if (btnMic) btnMic.disabled = false;
+          if (!overlay.hidden) {
+            statusEl.textContent = "🎤 말하기를 눌러 음성으로 답하거나, 버튼을 선택하세요.";
+          }
         };
         if (btnTts) btnTts.onclick = runTtsAndVoice;
 
-        // 자동 TTS 시도 (user gesture 없이 실패할 수 있음 — 실패해도 버튼으로 재시도 가능)
+        // 자동 TTS 시도 (user gesture 없이 실패할 수 있음)
+        // STT는 자동 시작하지 않음 — rec.start()는 user gesture(🎤 클릭) 내에서만 호출해야 권한 다이얼로그 없음
         await speak(question);
-        await new Promise((r) => setTimeout(r, 400));
-        await runVoice();
+        if (!overlay.hidden) {
+          statusEl.textContent = "🎤 말하기를 눌러 음성으로 답하거나, 버튼을 선택하세요.";
+        }
       }
 
       async function startRecommendationPushWatch(navigatedItem) {
