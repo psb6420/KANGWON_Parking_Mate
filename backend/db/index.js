@@ -145,7 +145,7 @@ function initSchema(db) {
 }
 
 function seedDefaultArduinoLots(db) {
-  db.prepare(
+  const upsertLot = db.prepare(
     `INSERT INTO arduino_parking_lots (lot_id, name, address, lat, lng, total_slots)
      VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT(lot_id) DO UPDATE SET
@@ -154,22 +154,25 @@ function seedDefaultArduinoLots(db) {
        lat = excluded.lat,
        lng = excluded.lng,
        total_slots = excluded.total_slots`
-  ).run(
-    "KNU_PARKING_6",
-    "강원대학교 주차장6",
-    "강원특별자치도 춘천시 강원대학길 1",
-    37.8691389,
-    127.7405348,
-    12,
+  );
+  const upsertSlot = db.prepare(
+    `INSERT INTO arduino_slots (lot_id, slot_no, is_occupied, sensor_value, updated_at)
+     VALUES (?, ?, ?, NULL, datetime('now'))
+     ON CONFLICT(lot_id, slot_no) DO UPDATE SET
+       is_occupied = excluded.is_occupied`
   );
 
-  const insertSlot = db.prepare(
-    `INSERT INTO arduino_slots (lot_id, slot_no, is_occupied, sensor_value, updated_at)
-     VALUES (?, ?, 0, NULL, datetime('now'))
-     ON CONFLICT(lot_id, slot_no) DO NOTHING`
-  );
-  for (let slotNo = 1; slotNo <= 12; slotNo += 1) {
-    insertSlot.run("KNU_PARKING_6", slotNo);
+  const lots = [
+    { id: "KNU_PARKING_6", name: "강원대학교 주차장6", address: "강원특별자치도 춘천시 강원대학길 1", lat: 37.8691389, lng: 127.7405348, totalSlots: 12, occupiedSlots: [1,2,3,4,5,6,7,8,9,10,12] },
+    { id: "KNU_PARKING_BAENGNOKAN", name: "강원대학교 백록관 주차장", address: "강원특별자치도 춘천시 강원대학길 1", lat: 37.868692486145015, lng: 127.74127352696846, totalSlots: 12, occupiedSlots: [3, 6, 8, 12] },
+  ];
+
+  for (const lot of lots) {
+    upsertLot.run(lot.id, lot.name, lot.address, lot.lat, lot.lng, lot.totalSlots);
+    const occupiedSet = new Set(lot.occupiedSlots || []);
+    for (let slotNo = 1; slotNo <= lot.totalSlots; slotNo += 1) {
+      upsertSlot.run(lot.id, slotNo, occupiedSet.has(slotNo) ? 1 : 0);
+    }
   }
 }
 

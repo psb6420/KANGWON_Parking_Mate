@@ -20,6 +20,16 @@ const KNU_PARKING_LOT_6 = {
   lat: 37.8691389,
   lng: 127.7405348,
   totalSlots: 12,
+  arduinoSlot: "A11",
+};
+const KNU_PARKING_BAENGNOKAN = {
+  id: "KNU_PARKING_BAENGNOKAN",
+  name: "강원대학교 백록관 주차장",
+  address: "강원특별자치도 춘천시 강원대학길 1",
+  lat: 37.868692486145015,
+  lng: 127.74127352696846,
+  totalSlots: 12,
+  surroundingLabels: { top: "60주년 기념관", bottom: "도로", left: "백록관", right: "" },
 };
 
 const MIME = {
@@ -393,17 +403,22 @@ function buildMarkerRows(infoRows, realtimeRows, realtimeChangeById = new Map())
     });
   }
   rows.push(createKnuParkingLot6Row(realtimeChangeById.get(KNU_PARKING_LOT_6.id) || null));
+  rows.push(createVirtualArduinoRow(KNU_PARKING_BAENGNOKAN, realtimeChangeById.get(KNU_PARKING_BAENGNOKAN.id) || null));
   return rows;
 }
 
 function createKnuParkingLot6Row(realtimeChange = null) {
-  const total = String(KNU_PARKING_LOT_6.totalSlots);
+  return createVirtualArduinoRow(KNU_PARKING_LOT_6, realtimeChange);
+}
+
+function createVirtualArduinoRow(lot, realtimeChange = null) {
+  const total = String(lot.totalSlots);
   return {
-    managementNo: KNU_PARKING_LOT_6.id,
-    name: KNU_PARKING_LOT_6.name,
-    address: KNU_PARKING_LOT_6.address,
-    lat: KNU_PARKING_LOT_6.lat,
-    lng: KNU_PARKING_LOT_6.lng,
+    managementNo: lot.id,
+    name: lot.name,
+    address: lot.address,
+    lat: lot.lat,
+    lng: lot.lng,
     needsGeocode: false,
     coordinateSource: "virtual-arduino",
     total,
@@ -411,33 +426,34 @@ function createKnuParkingLot6Row(realtimeChange = null) {
     realtimeAvailable: total,
     realtimeChange,
     isVirtualArduinoLot: true,
-    arduinoLotId: KNU_PARKING_LOT_6.id,
+    arduinoLotId: lot.id,
     slotLayout: {
       columns: 4,
       rows: 3,
-      totalSlots: KNU_PARKING_LOT_6.totalSlots,
-      arduinoSlot: "A1",
+      totalSlots: lot.totalSlots,
+      arduinoSlot: lot.arduinoSlot || "A1",
+      surroundingLabels: lot.surroundingLabels || null,
     },
     sourceEntries: [
       {
         apiSource: "ARDUINO",
-        sourceApi: "virtual slots + Arduino A1",
-        sourceId: KNU_PARKING_LOT_6.id,
-        name: KNU_PARKING_LOT_6.name,
-        address: KNU_PARKING_LOT_6.address,
+        sourceApi: `virtual slots + Arduino ${lot.arduinoSlot || "A1"}`,
+        sourceId: lot.id,
+        name: lot.name,
+        address: lot.address,
         available: total,
         total,
         realtimeChange,
         raw: {
           slotLayout: "A1-A12 / 4x3",
-          arduinoSlot: "A1",
+          arduinoSlot: lot.arduinoSlot || "A1",
         },
       },
     ],
     sourceLabels: ["ARDUINO"],
-    operationSummary: "가상 주차면 A1-A12 / A1 Arduino 센서 연동",
+    operationSummary: `가상 주차면 A1-A12 / ${lot.arduinoSlot || "A1"} Arduino 센서 연동`,
     chargeSummary: "프로토타입 가상 주차장입니다.",
-    operationDetails: ["가상 주차면 12면 중 A1은 Arduino 센서 상태와 연결됩니다."],
+    operationDetails: [`가상 주차면 12면 중 ${lot.arduinoSlot || "A1"}은 Arduino 센서 상태와 연결됩니다.`],
     hasOperationInfo: true,
   };
 }

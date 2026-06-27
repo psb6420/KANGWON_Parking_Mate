@@ -547,6 +547,25 @@
         font-weight: 800;
       }
 
+      .slot-cell.recommended {
+        outline: 2px solid #f59e0b;
+        outline-offset: -2px;
+        background: #fffbeb;
+      }
+
+      .slot-recommend-badge {
+        position: absolute;
+        z-index: 2;
+        left: 3px;
+        bottom: 3px;
+        padding: 2px 5px;
+        border-radius: 3px;
+        background: #f59e0b;
+        color: #fff;
+        font-size: 7px;
+        font-weight: 800;
+      }
+
 
       .control-panel {
         border: 1px solid var(--line);
@@ -1204,6 +1223,7 @@
       let activeParkingItem = null;
       let arduinoStatusSource = null;
       const arduinoSlotsByLot = new Map();
+      const arduinoSensorSlotByLot = new Map();
       let lastRealtimeChanges = new Map();
       let lastRealtimeChangeSummary = null;
       let kakaoSdkLoadingPromise = null;
@@ -1503,17 +1523,19 @@
         return "균형 추천";
       }
 
-      function defaultVirtualSlots() {
+      function defaultVirtualSlots(sensorSlotNo = 1) {
         return Array.from({ length: VIRTUAL_SLOT_COUNT }, (_, index) => ({
           slotNo: index + 1,
           label: `A${index + 1}`,
-          isOccupied: false,
-          isSensorLinked: index === 0,
+          isOccupied: (index + 1) !== sensorSlotNo,
+          isSensorLinked: (index + 1) === sensorSlotNo,
           updatedAt: null,
         }));
       }
 
       function normalizeArduinoSlots(payload) {
+        const lotId = payload?.lot_id;
+        const sensorSlotNo = (lotId && arduinoSensorSlotByLot.get(lotId)) || 1;
         const bySlot = new Map();
         for (const slot of payload?.slots || []) {
           const slotNo = Number(slot.slotNo ?? slot.slot_no);
@@ -1522,17 +1544,20 @@
             slotNo,
             label: slot.slotLabel || `A${slotNo}`,
             isOccupied: Boolean(slot.isOccupied ?? slot.is_occupied),
-            isSensorLinked: slotNo === 1,
+            isSensorLinked: slotNo === sensorSlotNo,
             sensorValue: slot.sensorValue ?? slot.sensor_value ?? slot.distance_cm ?? null,
             updatedAt: slot.updatedAt ?? slot.updated_at ?? null,
           });
         }
-        return defaultVirtualSlots().map((slot) => bySlot.get(slot.slotNo) || slot);
+        return defaultVirtualSlots(sensorSlotNo).map((slot) => bySlot.get(slot.slotNo) || slot);
       }
 
       function decorateArduinoItem(item) {
         if (!item?.arduinoLotId) return item;
-        const slots = arduinoSlotsByLot.get(item.arduinoLotId) || defaultVirtualSlots();
+        const arduinoSlotLabel = item.slotLayout?.arduinoSlot || "A1";
+        const sensorSlotNo = parseInt(arduinoSlotLabel.replace(/^[A-Za-z]+/, ""), 10) || 1;
+        arduinoSensorSlotByLot.set(item.arduinoLotId, sensorSlotNo);
+        const slots = arduinoSlotsByLot.get(item.arduinoLotId) || defaultVirtualSlots(sensorSlotNo);
         const available = slots.filter((slot) => !slot.isOccupied).length;
         return {
           ...item,
@@ -1599,6 +1624,11 @@
         }
       }
 
+      async function refreshAllArduinoLots(rows) {
+        const lotIds = [...new Set((rows || []).map((r) => r.arduinoLotId).filter(Boolean))];
+        await Promise.all(lotIds.map((id) => refreshArduinoLotState(id)));
+      }
+
       function startArduinoStatusStream() {
         if (arduinoStatusSource) return;
         try {
@@ -1654,6 +1684,37 @@
           Math.sin(dLat / 2) ** 2 +
           Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
         return 2 * earth * Math.asin(Math.sqrt(h));
+      }
+
+      function calcBearing(lat1, lng1, lat2, lng2) {
+        const toRad = (v) => v * Math.PI / 180;
+        const φ1 = toRad(lat1), φ2 = toRad(lat2);
+        const Δλ = toRad(lng2 - lng1);
+        const y = Math.sin(Δλ) * Math.cos(φ2);
+        const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+        return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+      }
+
+      function recommendedArduinoSlot(item, destination) {
+        if (!destination || !item?.arduinoSlots || !item.lat || !item.lng) return null;
+        const bearing = calcBearing(item.lat, item.lng, destination.lat, destination.lng);
+        const rad = bearing * Math.PI / 180;
+        const dirX = Math.sin(rad);
+        const dirY = -Math.cos(rad);
+        const cols = item.slotLayout?.columns || 4;
+        const rows = item.slotLayout?.rows || 3;
+        let bestLabel = null, bestScore = -Infinity;
+        for (const slot of item.arduinoSlots) {
+          if (slot.isOccupied) continue;
+          const idx = slot.slotNo - 1;
+          const col = idx % cols;
+          const row = Math.floor(idx / cols);
+          const nx = cols > 1 ? (col / (cols - 1)) * 2 - 1 : 0;
+          const ny = rows > 1 ? (row / (rows - 1)) * 2 - 1 : 0;
+          const score = nx * dirX + ny * dirY;
+          if (score > bestScore) { bestScore = score; bestLabel = slot.label; }
+        }
+        return bestLabel;
       }
 
       function availabilityRatio(item) {
@@ -1991,7 +2052,7 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
               payload.data?.length &&
               payload.data.length !== lastRenderedMarkerCount
             ) {
-              await refreshArduinoLotState(KNU_PARKING_LOT_ID);
+              await refreshAllArduinoLots(payload.data);
               const decoratedRows = decorateArduinoRows(payload.data);
               await renderParkingRows(decoratedRows);
               rememberRealtimeRows(decoratedRows);
@@ -2004,7 +2065,7 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
             payload = await requestParking(serviceKey, false);
           }
 
-          await refreshArduinoLotState(KNU_PARKING_LOT_ID);
+          await refreshAllArduinoLots(payload.data);
           const finalRows = decorateArduinoRows(payload.data || []);
           await renderParkingRows(finalRows);
           allParkingRows = finalRows;
@@ -2095,7 +2156,7 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
             await wait(2500);
             payload = await requestParking(serviceKey, false);
           }
-          await refreshArduinoLotState(KNU_PARKING_LOT_ID);
+          await refreshAllArduinoLots(payload.data);
           const refreshedRows = decorateArduinoRows(payload.data || []);
           const changes = diffRealtimeRows(previousRows, refreshedRows);
           lastRealtimeChanges = changes.byId;
@@ -2431,20 +2492,23 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
       function renderArduinoSlotBoard(item) {
         if (!item?.arduinoLotId) return "";
         const slots = item.arduinoSlots || defaultVirtualSlots();
+        const recommended = recommendedArduinoSlot(item, lastDestination);
         const renderSlot = (slot) => {
+            const isRecommended = recommended && slot.label === recommended;
             const statusClass = slot.isOccupied ? "occupied" : "available";
             const statusText = slot.isOccupied ? "주차 중" : "비어 있음";
             return `
               <div
-                class="slot-cell ${statusClass}${slot.isSensorLinked ? " sensor" : ""}"
+                class="slot-cell ${statusClass}${slot.isSensorLinked ? " sensor" : ""}${isRecommended ? " recommended" : ""}"
                 data-slot="${escapeHtml(slot.label)}"
                 role="img"
-                aria-label="${escapeHtml(`${slot.label} ${statusText}${slot.isSensorLinked ? ", Arduino 센서 연결" : ""}`)}"
+                aria-label="${escapeHtml(`${slot.label} ${statusText}${slot.isSensorLinked ? ", Arduino 센서 연결" : ""}${isRecommended ? ", 추천 자리" : ""}`)}"
               >
                 <strong>${escapeHtml(slot.label)}</strong>
                 <span class="slot-car" aria-hidden="true"></span>
                 <span class="slot-status"><i class="slot-dot ${statusClass}"></i>${escapeHtml(statusText)}</span>
                 ${slot.isSensorLinked ? '<span class="slot-sensor-badge">Arduino</span>' : ""}
+                ${isRecommended ? '<span class="slot-recommend-badge">추천</span>' : ""}
               </div>
             `;
           };
@@ -2452,12 +2516,14 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
           `<div class="slot-row">${slots.slice(start, start + 4).map(renderSlot).join("")}</div>`,
         );
 
+        const surrounding = item.slotLayout?.surroundingLabels || { top: "공학 3호관", left: "공학 3호관", right: "60주년 기념관", bottom: "백록관" };
+        const siteLabel = (pos) => surrounding[pos] ? `<div class="site-label ${pos}">${escapeHtml(surrounding[pos])}</div>` : "";
         return `
-          <section class="slot-panel" aria-label="강원대학교 주차장6 주차면">
+          <section class="slot-panel" aria-label="${escapeHtml(item.name)} 주차면">
             <div class="slot-panel-head">
               <div>
                 <strong>4 x 3 주차면</strong>
-                <span class="panel-meta">A1-A12, A1은 Arduino 센서와 연결</span>
+                <span class="panel-meta">A1-A12, ${escapeHtml(item.slotLayout?.arduinoSlot || "A1")}은 Arduino 센서와 연결</span>
               </div>
               <div class="slot-legend" aria-label="주차면 상태 범례">
                 <span><i class="slot-dot available"></i>비어 있음</span>
@@ -2466,10 +2532,10 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
               </div>
             </div>
             <div class="slot-site-map" aria-label="주차장 주변 건물 배치">
-              <div class="site-label top">공학 3호관</div>
-              <div class="site-label left">공학 3호관</div>
-              <div class="site-label right">60주년 기념관</div>
-              <div class="site-label bottom">백록관</div>
+              ${siteLabel("top")}
+              ${siteLabel("left")}
+              ${siteLabel("right")}
+              ${siteLabel("bottom")}
               <div class="slot-lot-area">
                 ${slotRows[0]}
                 <div class="slot-driving-lane"><span class="slot-lane-arrow"></span></div>

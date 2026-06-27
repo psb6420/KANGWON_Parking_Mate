@@ -6,7 +6,7 @@ const { fetchGangneungParking } = require("./publicApi");
 const DEFAULT_MONITOR_INTERVAL_MS = 60 * 1000;
 const DEFAULT_WATCH_MINUTES = 120;
 const MAX_WATCH_LOTS = 10;
-const KNU_PARKING_LOT_ID = "KNU_PARKING_6";
+const ARDUINO_LOT_IDS = new Set(["KNU_PARKING_6", "KNU_PARKING_BAENGNOKAN"]);
 
 let monitorTimer = null;
 let monitorRunning = false;
@@ -209,10 +209,10 @@ function extractItems(payload) {
   return item && typeof item === "object" ? [item] : [];
 }
 
-function arduinoState(db) {
+function arduinoStateForLot(db, lotId) {
   const slots = db
     .prepare("SELECT is_occupied FROM arduino_slots WHERE lot_id = ?")
-    .all(KNU_PARKING_LOT_ID);
+    .all(lotId);
   if (!slots.length) return null;
   return {
     available: slots.filter((slot) => !slot.is_occupied).length,
@@ -222,7 +222,7 @@ function arduinoState(db) {
 
 async function fetchCurrentStates(managementNos, db) {
   const states = new Map();
-  const needsGangneung = managementNos.some((id) => id !== KNU_PARKING_LOT_ID);
+  const needsGangneung = managementNos.some((id) => !ARDUINO_LOT_IDS.has(id));
 
   if (needsGangneung) {
     const serviceKey = String(process.env.DATA_GO_KR_SERVICE_KEY || "").trim();
@@ -238,9 +238,10 @@ async function fetchCurrentStates(managementNos, db) {
     }
   }
 
-  if (managementNos.includes(KNU_PARKING_LOT_ID)) {
-    const state = arduinoState(db);
-    if (state) states.set(KNU_PARKING_LOT_ID, state);
+  for (const lotId of managementNos) {
+    if (!ARDUINO_LOT_IDS.has(lotId)) continue;
+    const state = arduinoStateForLot(db, lotId);
+    if (state) states.set(lotId, state);
   }
   return states;
 }
