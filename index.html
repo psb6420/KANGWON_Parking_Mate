@@ -1470,8 +1470,11 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
         if (!clientKakaoKey) {
           throw new Error("Kakao JavaScript key is required.");
         }
-        if (window.Kakao?.Navi) {
+        if (window.Kakao) {
           if (!window.Kakao.isInitialized()) window.Kakao.init(clientKakaoKey);
+          if (!window.Kakao.Navi) {
+            throw new Error("Kakao Navi SDK object was not found.");
+          }
           return window.Kakao;
         }
         if (kakaoNaviSdkLoadingPromise) return kakaoNaviSdkLoadingPromise;
@@ -1483,12 +1486,17 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
           script.crossOrigin = "anonymous";
           script.async = true;
           script.onload = () => {
-            if (!window.Kakao?.Navi) {
+            if (!window.Kakao) {
+              kakaoNaviSdkLoadingPromise = null;
+              reject(new Error("Kakao SDK object was not found."));
+              return;
+            }
+            if (!window.Kakao.isInitialized()) window.Kakao.init(clientKakaoKey);
+            if (!window.Kakao.Navi) {
               kakaoNaviSdkLoadingPromise = null;
               reject(new Error("Kakao Navi SDK object was not found."));
               return;
             }
-            if (!window.Kakao.isInitialized()) window.Kakao.init(clientKakaoKey);
             resolve(window.Kakao);
           };
           script.onerror = () => {
@@ -1509,17 +1517,31 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
           return;
         }
 
+        const destinationName = item.name || "주차장";
+        const isMobileDevice =
+          /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+          (/Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+        if (!isMobileDevice) {
+          const kakaoMapUrl = `https://map.kakao.com/link/to/${encodeURIComponent(destinationName)},${lat},${lng}`;
+          const mapWindow = window.open(kakaoMapUrl, "_blank", "noopener,noreferrer");
+          if (!mapWindow) window.location.assign(kakaoMapUrl);
+          setStatus(`PC에서는 ${destinationName} 카카오맵 웹 길찾기를 열었습니다.`);
+          return;
+        }
+
         const originalContent = button.innerHTML;
         button.disabled = true;
         button.textContent = "카카오내비 연결 중";
         try {
-          const KakaoSdk = await loadKakaoNaviSdk();
           const destination = {
-            name: item.name || "주차장",
+            name: destinationName,
             x: lng,
             y: lat,
             coordType: "wgs84",
           };
+          const KakaoSdk = window.Kakao?.Navi
+            ? window.Kakao
+            : await loadKakaoNaviSdk();
           window.__parkingDebug.lastNaviRequest = destination;
           KakaoSdk.Navi.start(destination);
           setStatus(`${destination.name}으로 카카오내비 길안내를 시작합니다.`);
@@ -1932,8 +1954,6 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
           showParkingInfo(marker, item);
         });
 
-        if (!recommendationRank) return button;
-
         const entry = document.createElement("div");
         entry.className = "result-entry";
         entry.appendChild(button);
@@ -2343,6 +2363,7 @@ if (destinationMarker) { destinationMarker.setMap(null); destinationMarker = nul
       });
 
       initVoiceInput();
+      loadKakaoNaviSdk().catch(() => {});
       loadParking();
     </script>
   </body>
