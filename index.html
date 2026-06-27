@@ -2102,18 +2102,39 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
         async function toggleSlot() {
           btn.disabled = true;
           const nextOccupied = !isOccupied;
+          const statusEl = panel.querySelector(".debug-slot-label");
           try {
-            const res = await fetch(`${parkingBackendOrigin}/api/arduino/slot`, {
+            statusEl.textContent = "요청 중…";
+            const res = await fetch(`${parkingBackendOrigin}/api/arduino/sensor`, {
               method: "POST",
               headers: { "content-type": "application/json" },
               body: JSON.stringify({ lot_id: LOT_ID, slot_no: SLOT_NO, is_occupied: nextOccupied }),
             });
-            if (res.ok) {
-              isOccupied = nextOccupied;
-              // 지도/카드 즉시 반영
-              applyArduinoUpdate({ type: "update", lot_id: LOT_ID, slot_no: SLOT_NO, is_occupied: nextOccupied });
+            if (!res.ok) throw new Error(`서버 오류 ${res.status}`);
+            isOccupied = nextOccupied;
+            // 백엔드 최신 슬롯 상태 가져와서 전체 반영
+            await refreshArduinoLotState(LOT_ID);
+            allParkingRows = decorateArduinoRows(allParkingRows);
+            // 카드 DOM 업데이트
+            const updatedRow = allParkingRows.find((r) => r.arduinoLotId === LOT_ID);
+            if (updatedRow?.managementNo) {
+              const card = document.querySelector(`.result-item[data-management-no="${CSS.escape(updatedRow.managementNo)}"]`);
+              const slotSpan = card?.querySelector("[data-slot-display]");
+              if (slotSpan) {
+                slotSpan.textContent = `여유 ${formatParkingValue(updatedRow.realtimeAvailable)} / 총 ${formatParkingValue(updatedRow.realtimeTotal || updatedRow.total)}면 ${formatItemDelta(updatedRow)}`;
+                card.style.borderLeftColor = parkingMarkerColor(updatedRow);
+              }
             }
-          } catch { /* 네트워크 오류 무시 */ }
+            // 인포윈도우가 열려있으면 업데이트
+            if (activeParkingItem?.arduinoLotId === LOT_ID) {
+              activeParkingItem = decorateArduinoItem(activeParkingItem);
+              renderParkingPanel(activeParkingItem);
+            }
+            statusEl.textContent = `A11 (주차장6) ✓ ${nextOccupied ? "주차중" : "빈칸"}`;
+          } catch (e) {
+            statusEl.textContent = `오류: ${e.message}`;
+            console.error("[A11 toggle]", e);
+          }
           btn.disabled = false;
           updateBtn();
         }
