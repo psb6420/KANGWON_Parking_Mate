@@ -12,6 +12,11 @@ function broadcast(data) {
   }
 }
 
+// 아두이노 spotId → 실제 주차장 lot_id 매핑
+const ARDUINO_SPOT_MAP = {
+  "SPOT_01": "KNU_PARKING_6_A11",
+};
+
 // "TEST_ZONE_A1" → { lot_id: "TEST_ZONE", slotLabel: "A1", slot_no: 1 }
 function parseParsingId(parking_id) {
   const match = String(parking_id).match(/^(.+)_([A-Z])(\d+)$/);
@@ -22,14 +27,21 @@ function parseParsingId(parking_id) {
 }
 
 // POST /api/parking/status  ← Arduino에서 직접 호출
+// Arduino 형식(spotId, status) 또는 백엔드 형식(parking_id, is_occupied) 모두 허용
 router.post("/status", (req, res) => {
-  const { parking_id, is_occupied, distance_cm } = req.body;
+  const body = req.body;
+  const parking_id = body.parking_id || body.spotId;
+  const is_occupied = body.is_occupied != null
+    ? body.is_occupied
+    : (body.status === "OCCUPIED" ? true : body.status === "EMPTY" ? false : null);
+  const distance_cm = body.distance_cm ?? null;
 
   if (!parking_id || is_occupied == null) {
     return res.status(400).json({ error: "parking_id, is_occupied 필수" });
   }
 
-  const { lot_id, slotLabel, slot_no } = parseParsingId(parking_id);
+  const mappedId = ARDUINO_SPOT_MAP[parking_id] || parking_id;
+  const { lot_id, slotLabel, slot_no } = parseParsingId(mappedId);
   const db = getDb();
 
   // 주차장 없으면 자동 생성 (기본 좌표: 강릉 경포 해변 근처)
