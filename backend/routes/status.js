@@ -14,7 +14,7 @@ function broadcast(data) {
 
 // 아두이노 spotId → 실제 주차장 lot_id 매핑
 const ARDUINO_SPOT_MAP = {
-  "SPOT_01": "KNU_PARKING_6_A11",
+  "SPOT_01": "KNU_PARKING_BAENGNOKAN_A1",
 };
 
 // "TEST_ZONE_A1" → { lot_id: "TEST_ZONE", slotLabel: "A1", slot_no: 1 }
