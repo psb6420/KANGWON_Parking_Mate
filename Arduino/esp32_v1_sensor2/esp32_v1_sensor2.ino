@@ -19,16 +19,16 @@ const int LED_RED_PIN = 23;   // 주차됨 (빨간색)
 // ==========================================
 // 로직 설정 값
 // ==========================================
-const int DISTANCE_THRESHOLD = 20; // 측정 기준 거리 (cm)
+const int DISTANCE_THRESHOLD = 70; // 측정 기준 거리 (cm)
 const unsigned long DEBOUNCE_DELAY = 3000; // 테스트를 위해 3초(3000)로 변경 (원래 15000)
 const unsigned long HEARTBEAT_INTERVAL = 20000; // 생존 신고 전송 주기: 20초 (밀리초)
 
 // ==========================================
 // 통신 설정 (본인 환경에 맞게 수정하세요)
 // ==========================================
-const char* ssid = "구도휘의 iPhone";         // 와이파이 이름
-const char* password = "aaaassss"; // 와이파이 비밀번호
-const char* serverUrl = "http://172.20.10.8:8000/api/parking/status"; // 통신할 서버 URL
+const char* ssid = "iPhone";         // 와이파이 이름
+const char* password = "qwertyu12"; // 와이파이 비밀번호
+const char* serverUrl = "http://172.20.10.2:8000/api/parking/status"; // 통신할 서버 URL
 const String parkingSpotId = "SPOT_01";      // 주차 구역 ID
 
 // ==========================================
