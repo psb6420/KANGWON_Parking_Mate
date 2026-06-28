@@ -1533,6 +1533,7 @@
       let kakaoSdkLoadingPromise = null;
       let kakaoNaviSdkLoadingPromise = null;
       const parkingMarkers = [];
+      const markerByArduinoLotId = new Map();
       const geocodeCache = new Map();
       let destinationMarker = null;
       let lastDestination = null;
@@ -2152,13 +2153,21 @@
 
         // Update the result card's available/total counts in the sidebar list
         const updatedRow = allParkingRows.find((r) => r.arduinoLotId === lotId);
-        if (updatedRow?.managementNo) {
-          const card = document.querySelector(`.result-item[data-management-no="${updatedRow.managementNo}"]`);
+        if (updatedRow) {
+          const card = updatedRow.managementNo
+            ? document.querySelector(`.result-item[data-management-no="${CSS.escape(updatedRow.managementNo)}"]`)
+            : document.querySelector(`.result-item[data-arduino-lot-id="${CSS.escape(lotId)}"]`);
           const slotSpan = card?.querySelector("[data-slot-display]");
           if (slotSpan) {
             slotSpan.textContent = `여유 ${formatParkingValue(updatedRow.realtimeAvailable)} / 총 ${formatParkingValue(updatedRow.realtimeTotal || updatedRow.total)}면 ${formatItemDelta(updatedRow)}`;
             card.style.borderLeftColor = parkingMarkerColor(updatedRow);
           }
+        }
+
+        // 지도 마커 색상 실시간 업데이트
+        const updatedMarker = markerByArduinoLotId.get(lotId);
+        if (updatedMarker && updatedRow) {
+          updatedMarker.setImage(makeMarkerImage(parkingMarkerColor(updatedRow), ""));
         }
 
         if (activeParkingItem?.arduinoLotId === lotId) {
@@ -2928,6 +2937,7 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
             map,
             image: makeMarkerImage(parkingMarkerColor(item), recommendationRank || ""),
           });
+          if (item.arduinoLotId) markerByArduinoLotId.set(item.arduinoLotId, marker);
           parkingMarkers.push(marker);
           bounds.extend(position);
           kakao.maps.event.addListener(marker, "click", () =>
@@ -3083,6 +3093,7 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
         button.type = "button";
         button.className = "result-item";
         button.dataset.managementNo = item.managementNo || "";
+        if (item.arduinoLotId) button.dataset.arduinoLotId = item.arduinoLotId;
         if (recommendationRank) button.dataset.recommendationRank = String(recommendationRank);
         button.style.borderLeftColor = parkingMarkerColor(item);
         const operationText = item.operationSummary || "";
