@@ -428,13 +428,13 @@
         inset: 44px 42px;
         z-index: 1;
         display: grid;
-        grid-template-rows: 1fr 28px 1fr 28px 1fr;
+        grid-template-rows: 34px 1fr 28px 1fr 28px 1fr;
         gap: 6px;
       }
 
       .slot-row {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: 28px repeat(4, minmax(0, 1fr));
         gap: 5px;
       }
 
@@ -631,6 +631,87 @@
         font-weight: 800;
         writing-mode: horizontal-tb;
         text-align: center;
+      }
+
+      .slot-row-label {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 10px;
+        font-weight: 800;
+        text-align: center;
+        line-height: 1.2;
+      }
+      .slot-row-label.is-rec { color: #8b5cf6; }
+      .slot-row-label small { font-size: 8px; font-weight: 600; opacity: 0.8; }
+
+      .slot-col-header-row {
+        display: grid;
+        grid-template-columns: 28px repeat(4, minmax(0, 1fr));
+        gap: 5px;
+      }
+      .slot-col-header {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 10px;
+        font-weight: 800;
+        text-align: center;
+        line-height: 1.2;
+      }
+      .slot-col-header small {
+        font-size: 8px;
+        font-weight: 600;
+        opacity: 0.8;
+      }
+      .slot-col-header.is-rec { color: #8b5cf6; }
+
+      .slot-cell.spot-highlight {
+        border-color: rgba(139, 92, 246, 0.9);
+        box-shadow: inset 0 0 14px rgba(139, 92, 246, 0.18);
+      }
+      .slot-cell.occupied.spot-highlight {
+        border-color: rgba(139, 92, 246, 0.55);
+        box-shadow: inset 0 0 14px rgba(139, 92, 246, 0.08), inset 0 0 18px rgba(239, 68, 68, 0.16);
+      }
+
+      .slot-dot.spot-rec { background: #8b5cf6; border-radius: 999px; }
+
+      .slot-group-rec-bar {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 8px;
+        margin-top: 2px;
+      }
+      .slot-group-rec-item {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: 8px 10px;
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.55);
+        border: 1px solid var(--line);
+      }
+      .slot-group-rec-item.spot-rec { border-left: 3px solid #8b5cf6; }
+      .slot-group-rec-label {
+        font-size: 10px;
+        font-weight: 700;
+        color: var(--muted);
+      }
+      .slot-group-rec-item strong {
+        font-size: 13px;
+        font-weight: 800;
+        color: var(--ink);
+      }
+      .slot-rec-reason {
+        font-size: 11px;
+        color: var(--muted);
+        line-height: 1.5;
+        margin-top: 2px;
       }
 
 
@@ -1506,7 +1587,6 @@
         return fetch(`${parkingBackendOrigin}${path}`, { ...options, headers });
       };
       const KNU_PARKING_LOT_ID = "KNU_PARKING_6";
-      const VIRTUAL_SLOT_COUNT = 12;
       const KAKAO_JS_SDK_URL = "https://t1.kakaocdn.net/kakao_js_sdk/2.8.1/kakao.min.js";
       const KAKAO_JS_SDK_INTEGRITY = "sha384-OL+ylM/iuPLtW5U3XcvLSGhE8JzReKDank5InqlHGWPhb4140/yrBw0bg0y7+C9J";
 
@@ -1528,6 +1608,7 @@
       let arduinoStatusSource = null;
       const arduinoSlotsByLot = new Map();
       const arduinoSensorSlotByLot = new Map();
+      const arduinoLayoutByLot = new Map();
       let lastRealtimeChanges = new Map();
       let lastRealtimeChangeSummary = null;
       let kakaoSdkLoadingPromise = null;
@@ -1716,34 +1797,26 @@
         });
       }
 
-      // ── STT ──────────────────────────────────────────────────
       async function voiceAnnounceResults(displayRows, markers) {
         const top = displayRows.slice(0, Math.min(5, displayRows.length));
         if (!top.length) return;
 
         const ordinals = ["첫 번째", "두 번째", "세 번째", "네 번째", "다섯 번째"];
         const nameList = top.map(({ item }, i) => `${ordinals[i]}, ${item.name}`).join(". ");
-        await speak(`추천 주차장입니다. ${nameList}. 어디로 가시겠어요?`);
+        await speak(`추천 주차장입니다. ${nameList}.`);
         await new Promise((r) => setTimeout(r, 500));
 
         searchFeedbackEl.textContent = "🎤 듣고 있어요...";
         const heard = await listenForVoice(10000);
         searchFeedbackEl.textContent = "";
 
-        if (!heard) {
-          const { item } = top[0];
-          await speak(`첫 번째 주차장으로 이동합니다.`);
-          startKakaoNavigation(item, null);
-          return;
-        }
+        if (!heard) return; // 무응답 시 자동 선택 없이 그냥 종료
 
         let idx = -1;
 
         // 숫자로 선택
         const digitMatch = heard.match(/(\d+)/);
-        if (digitMatch) {
-          idx = parseInt(digitMatch[1], 10) - 1;
-        }
+        if (digitMatch) idx = parseInt(digitMatch[1], 10) - 1;
 
         // 한글 수사로 선택
         if (idx < 0) {
@@ -2067,17 +2140,18 @@
         return "균형 추천";
       }
 
-      function defaultVirtualSlots(sensorSlotNo = 1) {
-        return Array.from({ length: VIRTUAL_SLOT_COUNT }, (_, index) => ({
+      function defaultVirtualSlots(sensorSlotNo = 1, cols = 4, rows = 3) {
+        const ROW_LETTERS = "ABCDEFGHIJ";
+        return Array.from({ length: cols * rows }, (_, index) => ({
           slotNo: index + 1,
-          label: `A${index + 1}`,
+          label: `${ROW_LETTERS[Math.floor(index / cols)]}${(index % cols) + 1}`,
           isOccupied: (index + 1) !== sensorSlotNo,
           isSensorLinked: (index + 1) === sensorSlotNo,
           updatedAt: null,
         }));
       }
 
-      function normalizeArduinoSlots(payload) {
+      function normalizeArduinoSlots(payload, cols = 4, rows = 3) {
         const lotId = payload?.lot_id;
         const sensorSlotNo = (lotId && arduinoSensorSlotByLot.get(lotId)) || 1;
         const bySlot = new Map();
@@ -2086,22 +2160,25 @@
           if (!Number.isFinite(slotNo)) continue;
           bySlot.set(slotNo, {
             slotNo,
-            label: slot.slotLabel || `A${slotNo}`,
+            label: slot.slotLabel || `${"ABCDEFGHIJ"[Math.floor((slotNo - 1) / cols)]}${((slotNo - 1) % cols) + 1}`,
             isOccupied: Boolean(slot.isOccupied ?? slot.is_occupied),
             isSensorLinked: slotNo === sensorSlotNo,
             sensorValue: slot.sensorValue ?? slot.sensor_value ?? slot.distance_cm ?? null,
             updatedAt: slot.updatedAt ?? slot.updated_at ?? null,
           });
         }
-        return defaultVirtualSlots(sensorSlotNo).map((slot) => bySlot.get(slot.slotNo) || slot);
+        return defaultVirtualSlots(sensorSlotNo, cols, rows).map((slot) => bySlot.get(slot.slotNo) || slot);
       }
 
       function decorateArduinoItem(item) {
         if (!item?.arduinoLotId) return item;
         const arduinoSlotLabel = item.slotLayout?.arduinoSlot || "A1";
         const sensorSlotNo = parseInt(arduinoSlotLabel.replace(/^[A-Za-z]+/, ""), 10) || 1;
+        const cols = item.slotLayout?.columns || 4;
+        const rows = item.slotLayout?.rows || 3;
         arduinoSensorSlotByLot.set(item.arduinoLotId, sensorSlotNo);
-        const slots = arduinoSlotsByLot.get(item.arduinoLotId) || defaultVirtualSlots(sensorSlotNo);
+        arduinoLayoutByLot.set(item.arduinoLotId, { cols, rows });
+        const slots = arduinoSlotsByLot.get(item.arduinoLotId) || defaultVirtualSlots(sensorSlotNo, cols, rows);
         const available = slots.filter((slot) => !slot.isOccupied).length;
         return {
           ...item,
@@ -2121,19 +2198,24 @@
           const response = await backendFetch(`/api/arduino/slots/${encodeURIComponent(lotId)}`);
           if (!response.ok) throw new Error(`Arduino backend ${response.status}`);
           const payload = await response.json();
-          arduinoSlotsByLot.set(lotId, normalizeArduinoSlots(payload));
+          const layout = arduinoLayoutByLot.get(lotId) || { cols: 4, rows: 3 };
+          arduinoSlotsByLot.set(lotId, normalizeArduinoSlots(payload, layout.cols, layout.rows));
         } catch {
-          if (!arduinoSlotsByLot.has(lotId)) arduinoSlotsByLot.set(lotId, defaultVirtualSlots());
+          if (!arduinoSlotsByLot.has(lotId)) {
+            const layout = arduinoLayoutByLot.get(lotId) || { cols: 4, rows: 3 };
+            arduinoSlotsByLot.set(lotId, defaultVirtualSlots(undefined, layout.cols, layout.rows));
+          }
         }
       }
 
       function applyArduinoUpdate(data) {
         const lotId = data?.lot_id;
         if (!lotId) return;
+        const layout = arduinoLayoutByLot.get(lotId) || { cols: 4, rows: 3 };
         if (data.type === "init") {
-          arduinoSlotsByLot.set(lotId, normalizeArduinoSlots(data));
+          arduinoSlotsByLot.set(lotId, normalizeArduinoSlots(data, layout.cols, layout.rows));
         } else if (data.type === "update") {
-          const slots = arduinoSlotsByLot.get(lotId) || defaultVirtualSlots();
+          const slots = arduinoSlotsByLot.get(lotId) || defaultVirtualSlots(undefined, layout.cols, layout.rows);
           const slotNo = Number(data.slot_no);
           const nextSlots = slots.map((slot) =>
             slot.slotNo === slotNo
@@ -2177,6 +2259,14 @@
       }
 
       async function refreshAllArduinoLots(rows) {
+        for (const row of rows || []) {
+          if (row.arduinoLotId) {
+            arduinoLayoutByLot.set(row.arduinoLotId, {
+              cols: row.slotLayout?.columns || 4,
+              rows: row.slotLayout?.rows || 3,
+            });
+          }
+        }
         const lotIds = [...new Set((rows || []).map((r) => r.arduinoLotId).filter(Boolean))];
         await Promise.all(lotIds.map((id) => refreshArduinoLotState(id)));
       }
@@ -2289,26 +2379,65 @@
         return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
       }
 
-      function recommendedArduinoSlot(item, destination) {
-        if (!destination || !item?.arduinoSlots || !item.lat || !item.lng) return null;
-        const bearing = calcBearing(item.lat, item.lng, destination.lat, destination.lng);
-        const rad = bearing * Math.PI / 180;
-        const dirX = Math.sin(rad);
-        const dirY = -Math.cos(rad);
+      function recommendedArduinoGroup(item, destination) {
+        if (!item?.arduinoSlots) return null;
+        if (!destination) return null;
         const cols = item.slotLayout?.columns || 4;
         const rows = item.slotLayout?.rows || 3;
-        let bestLabel = null, bestScore = -Infinity;
+        const ROW_LETTERS = "ABCDEFGHIJ";
+
+        // 모든 행·열 초기화 (빈자리 0부터 시작)
+        const rowAvail = {}, colAvail = {};
+        for (let r = 0; r < rows; r++) rowAvail[ROW_LETTERS[r]] = 0;
+        for (let c = 1; c <= cols; c++) colAvail[c] = 0;
+
         for (const slot of item.arduinoSlots) {
           if (slot.isOccupied) continue;
-          const idx = slot.slotNo - 1;
-          const col = idx % cols;
-          const row = Math.floor(idx / cols);
-          const nx = cols > 1 ? (col / (cols - 1)) * 2 - 1 : 0;
-          const ny = rows > 1 ? (row / (rows - 1)) * 2 - 1 : 0;
-          const score = nx * dirX + ny * dirY;
-          if (score > bestScore) { bestScore = score; bestLabel = slot.label; }
+          const r = slot.label[0];
+          const c = parseInt(slot.label.slice(1), 10);
+          if (rowAvail[r] !== undefined) rowAvail[r]++;
+          if (colAvail[c] !== undefined) colAvail[c]++;
         }
-        return bestLabel;
+
+        // 목적지 방향 단위 벡터
+        let dirX = 0, dirY = 0;
+        if (item.lat && item.lng) {
+          const bearing = calcBearing(item.lat, item.lng, destination.lat, destination.lng);
+          const rad = bearing * Math.PI / 180;
+          dirX = Math.sin(rad);
+          dirY = -Math.cos(rad); // Y: -1=위(북) ~ +1=아래(남)
+        }
+
+        // slotScore = 잔여비율(0~1) × 0.6 + 근접성(0~1) × 0.4
+        let bestRow = null, bestRowScore = -Infinity;
+        for (let r = 0; r < rows; r++) {
+          const letter = ROW_LETTERS[r];
+          const avail = rowAvail[letter];
+          if (avail === 0) continue;
+          const availRatio = avail / cols;
+          const ny = rows > 1 ? (r / (rows - 1)) * 2 - 1 : 0; // -1(맨위) ~ +1(맨아래)
+          const proximity = (ny * dirY + 1) / 2;               // 0~1, 목적지 방향에 가까울수록 1
+          const score = availRatio * 0.6 + proximity * 0.4;
+          if (score > bestRowScore) { bestRowScore = score; bestRow = letter; }
+        }
+
+        let bestCol = null, bestColScore = -Infinity;
+        for (let c = 1; c <= cols; c++) {
+          const avail = colAvail[c];
+          if (avail === 0) continue;
+          const availRatio = avail / rows;
+          const nx = cols > 1 ? ((c - 1) / (cols - 1)) * 2 - 1 : 0; // -1(왼쪽) ~ +1(오른쪽)
+          const proximity = (nx * dirX + 1) / 2;                      // 0~1
+          const score = availRatio * 0.6 + proximity * 0.4;
+          if (score > bestColScore) { bestColScore = score; bestCol = c; }
+        }
+
+        // 행/열 중 점수가 더 높은 쪽 하나만 선택
+        if (bestRowScore >= bestColScore) {
+          return { row: bestRow, col: null, rowAvail, colAvail };
+        } else {
+          return { row: null, col: bestCol, rowAvail, colAvail };
+        }
       }
 
       function availabilityRatio(item) {
@@ -3225,30 +3354,73 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
       function renderArduinoSlotBoard(item) {
         if (!item?.arduinoLotId) return "";
         const slots = item.arduinoSlots || defaultVirtualSlots();
-        const recommended = recommendedArduinoSlot(item, lastDestination);
+        const cols = item.slotLayout?.columns || 4;
+        const rows = item.slotLayout?.rows || 3;
+        const ROW_LETTERS = "ABCDEFGHIJ";
+        const group = recommendedArduinoGroup(item, lastDestination);
+
+        const rowStats = {}, colStats = {};
+        for (let r = 0; r < rows; r++) rowStats[ROW_LETTERS[r]] = { avail: 0, total: cols };
+        for (let c = 1; c <= cols; c++) colStats[c] = { avail: 0, total: rows };
+        for (const slot of slots) {
+          const r = slot.label[0];
+          const c = parseInt(slot.label.slice(1), 10);
+          if (!slot.isOccupied) {
+            if (rowStats[r]) rowStats[r].avail++;
+            if (colStats[c]) colStats[c].avail++;
+          }
+        }
+
         const renderSlot = (slot) => {
-            const isRecommended = recommended && slot.label === recommended;
-            const statusClass = slot.isOccupied ? "occupied" : "available";
-            const statusText = slot.isOccupied ? "주차 중" : "비어 있음";
-            return `
-              <div
-                class="slot-cell ${statusClass}${slot.isSensorLinked ? " sensor" : ""}${isRecommended ? " recommended" : ""}"
-                data-slot="${escapeHtml(slot.label)}"
-                role="img"
-                aria-label="${escapeHtml(`${slot.label} ${statusText}${slot.isSensorLinked ? ", Arduino 센서 연결" : ""}${isRecommended ? ", 추천 자리" : ""}`)}"
-              >
-                <strong>${escapeHtml(slot.label)}</strong>
-                <span class="slot-car" aria-hidden="true"></span>
-                ${isRecommended ? '<span class="slot-recommend-badge">추천</span>' : ""}
-              </div>
-            `;
-          };
-        const slotRows = [0, 4, 8].map((start) =>
-          `<div class="slot-row">${slots.slice(start, start + 4).map(renderSlot).join("")}</div>`,
-        );
+          const slotRowLetter = slot.label[0];
+          const slotColNum = parseInt(slot.label.slice(1), 10);
+          const isRowHL = group?.row === slotRowLetter;
+          const isColHL = group?.col === slotColNum;
+          const statusClass = slot.isOccupied ? "occupied" : "available";
+          const statusText = slot.isOccupied ? "주차 중" : "비어 있음";
+          const extraCls = [
+            (isRowHL || isColHL) && !slot.isOccupied ? "spot-highlight" : "",
+            slot.isSensorLinked ? "sensor" : "",
+          ].filter(Boolean).join(" ");
+          return `<div class="slot-cell ${statusClass}${extraCls ? " " + extraCls : ""}" data-slot="${escapeHtml(slot.label)}" role="img" aria-label="${escapeHtml(`${slot.label} ${statusText}`)}"><strong>${escapeHtml(slot.label)}</strong><span class="slot-car" aria-hidden="true"></span></div>`;
+        };
+
+        const colHeaderRow = `<div class="slot-col-header-row"><div></div>${Array.from({ length: cols }, (_, i) => {
+          const c = i + 1;
+          const stat = colStats[c] || { avail: 0, total: rows };
+          return `<div class="slot-col-header${group?.col === c ? " is-rec" : ""}">${c}열<small>${stat.avail}/${stat.total}</small></div>`;
+        }).join("")}</div>`;
+
+        const slotRowsHtml = Array.from({ length: rows }, (_, r) => {
+          const letter = ROW_LETTERS[r];
+          const stat = rowStats[letter] || { avail: 0, total: cols };
+          const isRecRow = group?.row === letter;
+          const start = r * cols;
+          return `<div class="slot-row"><div class="slot-row-label${isRecRow ? " is-rec" : ""}">${letter}<br><small>${stat.avail}/${stat.total}</small></div>${slots.slice(start, start + cols).map(renderSlot).join("")}</div>`;
+        });
 
         const surrounding = item.slotLayout?.surroundingLabels || { top: "공학 3호관", left: "공학 3호관", right: "60주년 기념관", bottom: "백록관" };
         const siteLabel = (pos) => surrounding[pos] ? `<div class="site-label ${pos}">${escapeHtml(surrounding[pos])}</div>` : "";
+        const recRowAvail = group?.row ? (rowStats[group.row] || {}).avail || 0 : 0;
+        const recColAvail = group?.col ? (colStats[group.col] || {}).avail || 0 : 0;
+        const intersectionLabel = group?.row && group?.col ? `${group.row}${group.col}` : null;
+        const intersectionAvail = intersectionLabel && slots.find(s => s.label === intersectionLabel && !s.isOccupied) ? 1 : 0;
+        const recCount = recRowAvail + recColAvail - intersectionAvail;
+        const recLabel = group
+          ? `${group.row ? group.row + "행" : ""}${group.row && group.col ? " · " : ""}${group.col ? group.col + "열" : ""} (빈자리 ${recCount}개)`
+          : "없음";
+
+        let recReason = "";
+        if (group && lastDestination) {
+          const destName = lastDestination.name || "목적지";
+          if (group.row) {
+            const stat = rowStats[group.row] || { avail: 0, total: cols };
+            recReason = `'${destName}' 방향에서 가장 가깝고 잔여율이 높은 행입니다. (${stat.avail}/${stat.total}면 여유)`;
+          } else if (group.col) {
+            const stat = colStats[group.col] || { avail: 0, total: rows };
+            recReason = `'${destName}' 방향에서 가장 가깝고 잔여율이 높은 열입니다. (${stat.avail}/${stat.total}면 여유)`;
+          }
+        }
         return `
           <section class="slot-panel" aria-label="${escapeHtml(item.name)} 주차면">
             <div class="slot-site-map" aria-label="주차장 주변 건물 배치">
@@ -3257,19 +3429,22 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
               ${siteLabel("right")}
               ${siteLabel("bottom")}
               <div class="slot-lot-area">
-                ${slotRows[0]}
+                ${colHeaderRow}
+                ${slotRowsHtml[0]}
                 <div class="slot-driving-lane"><span class="slot-lane-arrow"></span></div>
-                ${slotRows[1]}
+                ${slotRowsHtml[1]}
                 <div class="slot-driving-lane reverse"><span class="slot-lane-arrow"></span></div>
-                ${slotRows[2]}
+                ${slotRowsHtml[2]}
               </div>
+            </div>
+            <div class="slot-group-rec-bar">
+              <div class="slot-group-rec-item spot-rec"><span class="slot-group-rec-label">추천 자리</span><strong>${escapeHtml(recLabel)}</strong>${recReason ? `<span class="slot-rec-reason">${escapeHtml(recReason)}</span>` : ""}</div>
             </div>
             <div class="slot-panel-head">
               <div class="slot-legend" aria-label="주차면 상태 범례">
                 <span><i class="slot-dot available"></i>비어 있음</span>
                 <span><i class="slot-dot occupied"></i>주차 중</span>
-                <span><i class="slot-dot sensor"></i>센서 연결</span>
-                <span><i class="slot-dot recommend"></i>추천 자리</span>
+                <span><i class="slot-dot spot-rec"></i>추천 자리</span>
               </div>
             </div>
           </section>

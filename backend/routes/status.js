@@ -5,6 +5,13 @@ const { getDb } = require("../db");
 // SSE 클라이언트 목록
 const sseClients = new Set();
 
+// 4×3 그리드 기준: slot_no 1→A1, 5→B1, 9→C1 등으로 변환
+const GRID_COLS = 4;
+const ROW_LETTERS = "ABCDEFGHIJ";
+function slotNoToLabel(slotNo, cols = GRID_COLS) {
+  return `${ROW_LETTERS[Math.floor((slotNo - 1) / cols)]}${((slotNo - 1) % cols) + 1}`;
+}
+
 function broadcast(data) {
   const msg = `data: ${JSON.stringify(data)}\n\n`;
   for (const res of sseClients) {
@@ -80,7 +87,7 @@ router.post("/status", (req, res) => {
     type: "update",
     lot_id,
     slot_no,
-    slotLabel,
+    slotLabel: slotNoToLabel(slot_no),
     is_occupied: Boolean(is_occupied),
     distance_cm: distance_cm ?? null,
     available,
@@ -117,7 +124,7 @@ router.get("/status/live", (req, res) => {
       lng: lot.lng,
       slots: slots.map((s) => ({
         slot_no: s.slot_no,
-        slotLabel: `A${s.slot_no}`,
+        slotLabel: slotNoToLabel(s.slot_no),
         is_occupied: Boolean(s.is_occupied),
         distance_cm: s.sensor_value,
         updated_at: s.updated_at,
