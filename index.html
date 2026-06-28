@@ -1498,6 +1498,13 @@
         runtimeConfig.backendOrigin || `${window.location.protocol}//${window.location.hostname}:3001`,
       ).trim().replace(/\/$/, "");
       const appApiUrl = (path) => `${appApiOrigin}${path}`;
+      const backendFetch = (path, options = {}) => {
+        const isNgrok = parkingBackendOrigin.includes("ngrok");
+        const headers = isNgrok
+          ? { "ngrok-skip-browser-warning": "1", ...(options.headers || {}) }
+          : (options.headers || {});
+        return fetch(`${parkingBackendOrigin}${path}`, { ...options, headers });
+      };
       const KNU_PARKING_LOT_ID = "KNU_PARKING_6";
       const VIRTUAL_SLOT_COUNT = 12;
       const KAKAO_JS_SDK_URL = "https://t1.kakaocdn.net/kakao_js_sdk/2.8.1/kakao.min.js";
@@ -1643,7 +1650,7 @@
 
       function loadPushConfig() {
         if (!pushConfigPromise) {
-          pushConfigPromise = fetch(`${parkingBackendOrigin}/api/push/config`)
+          pushConfigPromise = backendFetch(`/api/push/config`)
             .then(async (response) => {
               const payload = await response.json().catch(() => ({}));
               if (!response.ok || !payload.enabled || !payload.publicKey) {
@@ -1934,7 +1941,7 @@
         }
 
         const lots = watchedRecommendationRows(navigatedItem);
-        const response = await fetch(`${parkingBackendOrigin}/api/push/watch`, {
+        const response = await backendFetch(`/api/push/watch`, {
           method: "POST",
           keepalive: true,
           headers: { "content-type": "application/json" },
@@ -1965,7 +1972,7 @@
         updatePushWatchStatus("추천 주차장 알림을 중지했습니다.");
         if (!watchId) return;
         try {
-          await fetch(`${parkingBackendOrigin}/api/push/watch/${encodeURIComponent(watchId)}`, {
+          await backendFetch(`/api/push/watch/${encodeURIComponent(watchId)}`, {
             method: "DELETE",
           });
         } catch {}
@@ -2110,7 +2117,7 @@
 
       async function refreshArduinoLotState(lotId) {
         try {
-          const response = await fetch(`${parkingBackendOrigin}/api/arduino/slots/${encodeURIComponent(lotId)}`);
+          const response = await backendFetch(`/api/arduino/slots/${encodeURIComponent(lotId)}`);
           if (!response.ok) throw new Error(`Arduino backend ${response.status}`);
           const payload = await response.json();
           arduinoSlotsByLot.set(lotId, normalizeArduinoSlots(payload));
@@ -2365,7 +2372,7 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
 
         async function fetchState() {
           try {
-            const res = await fetch(`${parkingBackendOrigin}/api/arduino/slots/${LOT_ID}`);
+            const res = await backendFetch(`/api/arduino/slots/${LOT_ID}`);
             const data = await res.json();
             const slot = (data.slots || []).find((s) => s.slot_no === SLOT_NO || s.slotNo === SLOT_NO);
             isOccupied = slot ? Boolean(slot.is_occupied ?? slot.isOccupied) : false;
@@ -2379,7 +2386,7 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
           const statusEl = panel.querySelector(".debug-slot-label");
           try {
             statusEl.textContent = "요청 중…";
-            const res = await fetch(`${parkingBackendOrigin}/api/arduino/sensor`, {
+            const res = await backendFetch(`/api/arduino/sensor`, {
               method: "POST",
               headers: { "content-type": "application/json" },
               body: JSON.stringify({ lot_id: LOT_ID, slot_no: SLOT_NO, is_occupied: nextOccupied }),
