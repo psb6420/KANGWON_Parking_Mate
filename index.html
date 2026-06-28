@@ -2181,8 +2181,12 @@
         await Promise.all(lotIds.map((id) => refreshArduinoLotState(id)));
       }
 
+      let arduinoSseReconnectTimer = null;
+      let arduinoLastSseReceived = 0;
+
       function startArduinoStatusStream() {
         if (arduinoStatusSource) return;
+        if (arduinoSseReconnectTimer) { clearTimeout(arduinoSseReconnectTimer); arduinoSseReconnectTimer = null; }
         try {
           const sseUrl = parkingBackendOrigin.includes("ngrok")
             ? `${parkingBackendOrigin}/api/parking/status/live?ngrok-skip-browser-warning=1`
@@ -2190,17 +2194,52 @@
           arduinoStatusSource = new EventSource(sseUrl);
           arduinoStatusSource.onmessage = (event) => {
             try {
+              arduinoLastSseReceived = Date.now();
               applyArduinoUpdate(JSON.parse(event.data));
             } catch {}
           };
           arduinoStatusSource.onerror = () => {
             arduinoStatusSource.close();
             arduinoStatusSource = null;
+            arduinoSseReconnectTimer = setTimeout(startArduinoStatusStream, 5000);
           };
         } catch {
           arduinoStatusSource = null;
+          arduinoSseReconnectTimer = setTimeout(startArduinoStatusStream, 5000);
         }
       }
+
+      async function pollArduinoState() {
+        if (!allParkingRows.length) return;
+        const lotIds = [...new Set(allParkingRows.map((r) => r.arduinoLotId).filter(Boolean))];
+        await Promise.all(lotIds.map(async (lotId) => {
+          try {
+            const res = await backendFetch(`/api/arduino/slots/${encodeURIComponent(lotId)}`);
+            if (!res.ok) return;
+            const payload = await res.json();
+            arduinoSlotsByLot.set(lotId, normalizeArduinoSlots(payload));
+            allParkingRows = decorateArduinoRows(allParkingRows);
+            const updatedRow = allParkingRows.find((r) => r.arduinoLotId === lotId);
+            if (updatedRow) {
+              const card = updatedRow.managementNo
+                ? document.querySelector(`.result-item[data-management-no="${CSS.escape(updatedRow.managementNo)}"]`)
+                : document.querySelector(`.result-item[data-arduino-lot-id="${CSS.escape(lotId)}"]`);
+              const slotSpan = card?.querySelector("[data-slot-display]");
+              if (slotSpan) {
+                slotSpan.textContent = `여유 ${formatParkingValue(updatedRow.realtimeAvailable)} / 총 ${formatParkingValue(updatedRow.realtimeTotal || updatedRow.total)}면 ${formatItemDelta(updatedRow)}`;
+                card.style.borderLeftColor = parkingMarkerColor(updatedRow);
+              }
+              const marker = markerByArduinoLotId.get(lotId);
+              if (marker && updatedRow) marker.setImage(makeMarkerImage(parkingMarkerColor(updatedRow), ""));
+            }
+            if (activeParkingItem?.arduinoLotId === lotId) {
+              activeParkingItem = decorateArduinoItem(activeParkingItem);
+              renderParkingPanel(activeParkingItem);
+            }
+          } catch {}
+        }));
+      }
+      setInterval(pollArduinoState, 10000);
 
       function searchDestinationPlace(keyword) {
         return new Promise((resolve, reject) => {
