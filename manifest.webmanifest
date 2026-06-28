@@ -7,5 +7,31 @@
   "display": "standalone",
   "background_color": "#eef3f8",
   "theme_color": "#1769e0",
-  "description": "추천 주차장의 실시간 잔여면을 확인하고 길찾기 중 변경 알림을 받습니다."
+  "description": "추천 주차장의 실시간 잔여면을 확인하고 길찾기 중 변경 알림을 받습니다.",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
 }

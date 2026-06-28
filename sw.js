@@ -17,6 +17,10 @@ self.addEventListener("push", (event) => {
       body: payload.body || "추천 주차장의 잔여면을 확인하세요.",
       tag: payload.tag || "parking-watch",
       renotify: true,
+      requireInteraction: true,
+      icon: payload.icon || "/icon-192.png",
+      badge: payload.badge || "/badge-72.png",
+      vibrate: [200, 100, 200],
       data: payload.data || { url: "/?view=map" },
     }),
   );
