@@ -259,16 +259,18 @@ async function fetchCurrentStates(managementNos, db) {
   return states;
 }
 
-// 잔여면 ±1 같은 미세 변동은 무시하고 의미 있는 임계값 전환에서만 알림.
-// - full   : 만차 진입 (previous>0 → 0)
-// - opened : 빈자리 발생 (0 → current>0)
-// - low    : 잔여면이 임계값 이하로 처음 진입 (previous>low → current<=low)
+// 잔여면에 변동이 있으면(±1 미세 변동 포함) 알림, 변동이 전혀 없으면 보내지 않음.
+// 반환 타입은 메시지 표현용 분류일 뿐 전송 여부와는 무관(null = 변동 없음).
+// - full    : 만차 진입 (previous>0 → 0)
+// - opened  : 빈자리 발생 (0 → current>0)
+// - low     : 잔여면이 임계값 이하 (곧 만차)
+// - changed : 그 외 일반 변동(미세 변동 포함)
 function classifyChange(previous, current, low) {
-  if (previous === null || current === previous) return null;
+  if (previous === null || current === previous) return null; // 변동 없음 → 전송 안 함
   if (current === 0 && previous > 0) return "full";
   if (previous === 0 && current > 0) return "opened";
-  if (current <= low && previous > low) return "low";
-  return null; // 그 외(임계값 위에서의 미세 증감, 임계값 아래에서의 추가 감소)는 무시
+  if (current <= low) return "low";
+  return "changed";
 }
 
 function describeChange(change) {
