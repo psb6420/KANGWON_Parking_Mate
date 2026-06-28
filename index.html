@@ -2168,7 +2168,10 @@
       function startArduinoStatusStream() {
         if (arduinoStatusSource) return;
         try {
-          arduinoStatusSource = new EventSource(`${parkingBackendOrigin}/api/parking/status/live`);
+          const sseUrl = parkingBackendOrigin.includes("ngrok")
+            ? `${parkingBackendOrigin}/api/parking/status/live?ngrok-skip-browser-warning=1`
+            : `${parkingBackendOrigin}/api/parking/status/live`;
+          arduinoStatusSource = new EventSource(sseUrl);
           arduinoStatusSource.onmessage = (event) => {
             try {
               applyArduinoUpdate(JSON.parse(event.data));
