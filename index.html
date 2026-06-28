@@ -583,19 +583,6 @@
         color: #ffd0d0;
       }
 
-      .slot-cell.sensor {
-        box-shadow:
-          0 0 0 2px rgba(37, 99, 235, 0.86),
-          0 0 16px rgba(37, 99, 235, 0.5),
-          inset 0 0 18px rgba(25, 195, 125, 0.12);
-      }
-
-      .slot-cell.sensor.occupied {
-        box-shadow:
-          0 0 0 2px rgba(37, 99, 235, 0.86),
-          0 0 16px rgba(37, 99, 235, 0.5),
-          inset 0 0 18px rgba(239, 68, 68, 0.16);
-      }
 
       .slot-sensor-badge {
         position: absolute;
@@ -992,6 +979,7 @@
         opacity: 0.65;
       }
 
+      .push-watch-status[hidden] { display: none; }
       .push-watch-status {
         display: flex;
         min-height: 38px;
@@ -1447,13 +1435,12 @@
         <section class="destination-search" aria-label="목적지 검색">
           <label for="destinationInput">
             목적지 검색
-            <span class="panel-meta">텍스트 또는 음성</span>
           </label>
           <div class="destination-row">
             <input
               id="destinationInput"
               type="search"
-              placeholder="레고랜드, 레고랜드에서 가까운 주차장 찾아줘"
+              placeholder="강원대, 강원대에서 가까운 주차장 찾아줘"
               autocomplete="off"
             />
             <button class="voice-button" type="button" id="voiceButton" aria-label="음성 입력">
@@ -1497,8 +1484,8 @@
             <h2 style="margin:0">추천 주차장</h2>
           </div>
         </div>
-        <div class="push-watch-status" id="pushWatchStatus" role="status">
-          <span id="pushWatchStatusText">길찾기를 누르면 추천 목록의 잔여면 알림을 시작합니다.</span>
+        <div class="push-watch-status" id="pushWatchStatus" role="status" hidden>
+          <span id="pushWatchStatusText"></span>
           <button class="push-watch-stop" type="button" id="stopPushWatchButton" hidden>알림 중지</button>
         </div>
         <section class="results" id="results" aria-live="polite"></section>
@@ -1707,7 +1694,10 @@
           pushWatchStatusTextEl.textContent = message;
         } else if (isActive) {
           pushWatchStatusTextEl.textContent = `추천 주차장 감시 중 · ${expiry.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}까지`;
+        } else {
+          pushWatchStatusTextEl.textContent = "";
         }
+        pushWatchStatusEl.hidden = !isActive && !pushWatchStatusTextEl.textContent.trim();
       }
 
       function urlBase64ToUint8Array(value) {
@@ -2098,8 +2088,16 @@
         });
       }
 
+      let savedMapCenter = null;
+      let savedMapLevel = null;
+
       function setActiveView(view) {
         const nextView = view === "map" ? "map" : "home";
+        // 지도 → 홈 전환 시 현재 위치 저장
+        if (nextView === "home" && map) {
+          savedMapCenter = map.getCenter();
+          savedMapLevel = map.getLevel();
+        }
         appShellEl.classList.toggle("view-home", nextView === "home");
         appShellEl.classList.toggle("view-map", nextView === "map");
         tabButtons.forEach((button) => {
@@ -2108,7 +2106,12 @@
         if (nextView === "map" && map) {
           setTimeout(() => {
             map.relayout();
-            if (latestMapBounds) map.setBounds(latestMapBounds);
+            if (savedMapCenter && savedMapLevel) {
+              map.setCenter(savedMapCenter);
+              map.setLevel(savedMapLevel);
+            } else if (latestMapBounds) {
+              map.setBounds(latestMapBounds);
+            }
           }, 80);
         }
       }
@@ -2463,10 +2466,10 @@
             const comfortScore = ratio;
             const score =
               preference === "near"
-                ? distanceScore * 0.78 + comfortScore * 0.22
+                ? distanceScore * 0.80 + comfortScore * 0.20
                 : preference === "comfort"
-                  ? comfortScore * 0.72 + distanceScore * 0.28
-                  : distanceScore * 0.52 + comfortScore * 0.48;
+                  ? comfortScore * 0.80 + distanceScore * 0.20
+                  : comfortScore * 0.60 + distanceScore * 0.40;
             return {
               ...item,
               destinationDistanceM: distanceM,
@@ -2521,7 +2524,10 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
           setActiveView("map");
           if (top3[0]) showParkingInfo(parkingMarkers[0], top3[0]);
           searchFeedbackEl.textContent = `${destination.name} 기준 AI 추천: ${preferenceLabel(parsed.preference)}.`;
-          setStatus(`AI가 ${destination.name} 주변 추천 주차장 상위 3개를 표시했습니다.`);
+          const prefShort = parsed.preference === "near" ? "가까움" : parsed.preference === "comfort" ? "쾌적함" : null;
+          pushWatchStatusTextEl.textContent = prefShort ? `${prefShort} 기준 검색 결과입니다.` : `${destination.name} 기준 검색 결과입니다.`;
+          pushWatchStatusEl.hidden = false;
+          setStatus(`AI가 ${destination.name} 주변 추천 주차장 상위 ${top3.length}개를 표시했습니다.`);
         } catch (error) {
           searchFeedbackEl.textContent = error.message;
         }
@@ -3019,6 +3025,12 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
           lastRealtimeChangeSummary = changes.summary;
           rememberRealtimeRows(refreshedRows);
           allParkingRows = refreshedRows;
+
+          // 갱신 전 지도 상태 보존
+          const savedCenter = map.getCenter();
+          const savedLevel = map.getLevel();
+          const savedActiveItem = activeParkingItem;
+
           if (lastDestination) {
             const ranked = rankedParkingRows(allParkingRows, lastDestination, lastRecommendationPreference);
             const within1500 = ranked.filter((lot) => Number.isFinite(lot.destinationDistanceM) && lot.destinationDistanceM <= 1500);
@@ -3026,6 +3038,19 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
             await renderParkingRows(refreshedTop, lastRecommendationReasons);
           } else {
             await renderParkingRows(refreshedRows);
+          }
+
+          // 지도 위치/줌 복원
+          map.setCenter(savedCenter);
+          map.setLevel(savedLevel);
+          // 열려있던 패널 복원
+          if (savedActiveItem) {
+            const restoredItem = allParkingRows.find((r) => r.managementNo === savedActiveItem.managementNo) || savedActiveItem;
+            const restoredMarker = restoredItem.arduinoLotId
+              ? markerByArduinoLotId.get(restoredItem.arduinoLotId)
+              : parkingMarkers[visibleParkingRows.findIndex((r) => r.managementNo === restoredItem.managementNo)];
+            if (restoredMarker) showParkingInfo(restoredMarker, restoredItem);
+            else renderParkingPanel(restoredItem);
           }
           renderSummary(payload);
           nextRealtimeRefreshAt = new Date(
@@ -3273,7 +3298,7 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
           </span>
           ${congestionBadge(item)}
           <span data-slot-display>여유 ${escapeHtml(formatParkingValue(item.realtimeAvailable))} / 총 ${escapeHtml(formatParkingValue(item.realtimeTotal || item.total))}면 ${escapeHtml(formatItemDelta(item))}</span>
-          ${distanceText ? `<span>목적지까지 ${escapeHtml(distanceText)} · AI 기준: ${escapeHtml(preferenceLabel(item.recommendationPreference))}</span>` : ""}
+          ${distanceText ? `<span>목적지까지 ${escapeHtml(distanceText)}</span>` : ""}
           <span>${escapeHtml(item.address || "주소 없음")}</span>
           ${operationText ? `<span>${escapeHtml(operationText)}</span>` : ""}
           ${reason ? `<span class="result-reason">${escapeHtml(reason)}</span>` : ""}
@@ -3380,7 +3405,7 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
           const statusText = slot.isOccupied ? "주차 중" : "비어 있음";
           const extraCls = [
             (isRowHL || isColHL) && !slot.isOccupied ? "spot-highlight" : "",
-            slot.isSensorLinked ? "sensor" : "",
+            "",
           ].filter(Boolean).join(" ");
           return `<div class="slot-cell ${statusClass}${extraCls ? " " + extraCls : ""}" data-slot="${escapeHtml(slot.label)}" role="img" aria-label="${escapeHtml(`${slot.label} ${statusText}`)}"><strong>${escapeHtml(slot.label)}</strong><span class="slot-car" aria-hidden="true"></span></div>`;
         };
@@ -3415,10 +3440,9 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
           const destName = lastDestination.name || "목적지";
           if (group.row) {
             const stat = rowStats[group.row] || { avail: 0, total: cols };
-            recReason = `'${destName}' 방향에서 가장 가깝고 잔여율이 높은 행입니다. (${stat.avail}/${stat.total}면 여유)`;
+            recReason = `'${destName}' 방향에서 가장 가깝고 잔여율이 높은 행입니다.`;
           } else if (group.col) {
-            const stat = colStats[group.col] || { avail: 0, total: rows };
-            recReason = `'${destName}' 방향에서 가장 가깝고 잔여율이 높은 열입니다. (${stat.avail}/${stat.total}면 여유)`;
+            recReason = `'${destName}' 방향에서 가장 가깝고 잔여율이 높은 열입니다.`;
           }
         }
         return `
@@ -3535,9 +3559,10 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
       function clearParkingMarkers() {
         parkingMarkers.forEach((marker) => marker.setMap(null));
         parkingMarkers.length = 0;
+        markerByArduinoLotId.clear();
         lastRenderedMarkerCount = 0;
         resultsEl.innerHTML = "";
-if (destinationMarker) { destinationMarker.setMap(null); destinationMarker = null; }
+        if (destinationMarker) { destinationMarker.setMap(null); destinationMarker = null; }
         if (centerMarker && map) centerMarker.setMap(map);
       }
 
@@ -3624,7 +3649,7 @@ if (destinationMarker) { destinationMarker.setMap(null); destinationMarker = nul
 
       function formatSigned(value) {
         const number = Number(value || 0);
-        if (number > 0) return `+${formatNumber(number)}`;
+        if (number >= 0) return `+${formatNumber(number)}`;
         return formatNumber(number);
       }
 

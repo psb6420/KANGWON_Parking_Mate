@@ -599,13 +599,36 @@ function fallbackParkingIntent(text) {
   let preference = "balanced";
   if (/쾌적|여유|한산|널널|자리|혼잡하지|안\s*붐비|멀어도/.test(compact)) {
     preference = "comfort";
-  } else if (/가까|근처|인근|도보|최단|가장\s*가까/.test(compact)) {
+  } else if (/가까|근처|인근|도보|최단|가장\s*가까|거동|불편|노인|어르신|할머니|할아버지|휠체어|장애|아기|유아|아이랑|어린이|짐이\s*많|짐\s*많|무거|급하|빨리/.test(compact)) {
     preference = "near";
+  }
+
+  const FALLBACK_REASON = "AI 분석을 사용할 수 없어 입력 문장을 기본 해석으로 처리했습니다.";
+  const SKIP_WORDS = /^(가까운|근처|쾌적한|추천|찾아|주차|이랑|랑|와|과|그|이|저|제|우리|여기|저기|거기)$/;
+  const STRIP_PARTICLES = /(에서|으로|로|에|이랑|랑|와|과|은|는)$/g;
+
+  function extractCandidate(word) {
+    const c = word.replace(STRIP_PARTICLES, "").trim();
+    return c.length >= 2 && !SKIP_WORDS.test(c) ? c : null;
+  }
+
+  // "백록관 주차장" — 주차장 바로 앞 단어
+  const beforeParking = compact.match(/(\S+)\s*주차장/);
+  if (beforeParking) {
+    const c = extractCandidate(beforeParking[1]);
+    if (c) return { destination: c, preference, reason: FALLBACK_REASON, usedAi: false };
+  }
+
+  // "백록관 갈거야/가려고/가고싶어/가야해" — 동사 앞 단어
+  const beforeVerb = compact.match(/(\S+)\s*(?:갈거야|갈게|갈건데|갈까|가려고|가고\s*싶|가야|갑니다|갔어|가자|갈게요|가는데|가볼까)/);
+  if (beforeVerb) {
+    const c = extractCandidate(beforeVerb[1]);
+    if (c) return { destination: c, preference, reason: FALLBACK_REASON, usedAi: false };
   }
 
   let destination = compact
     .replace(/(에서|근처에서)\s*(가까운|가까이|근처|인근).*$/g, "")
-    .replace(/(으로|로)\s*(갈|가).*$/g, "")
+    .replace(/(으로|로|이랑|랑)\s*(갈|가|가는데).*$/g, "")
     .replace(/주차장|찾아줘|찾아|추천해줘|추천|가까운|가까이|근처|인근|쾌적한|쾌적|여유로운|여유|한산한|한산|멀어도|되니깐|되니까|괜찮으니까/g, "")
     .replace(/\s+/g, " ")
     .trim();
@@ -654,31 +677,39 @@ async function analyzeParkingIntent(text) {
     "너는 강원 Parking Mate의 주차 추천 의도 분석기다.",
     "사용자 문장에서 목적지와 주차 선호를 추출해라.",
     "preference는 다음 중 하나만 사용한다: near, comfort, balanced.",
-    "- near: 가까움, 도보, 최단거리, 근처를 강하게 원함",
+    "- near: 가까움, 도보, 최단거리, 근처를 원함. 또는 거동 불편, 노인/어르신/할머니/할아버지 동반, 휠체어, 장애, 아기/유아/어린이 동반, 짐이 많음, 급함 등 가까운 주차가 필요한 상황",
     "- comfort: 멀어도 됨, 여유, 쾌적, 혼잡 회피, 자리 많음을 원함",
     "- balanced: 명확한 선호가 없거나 둘 다 균형",
-    "반드시 JSON만 반환해라. 예: {\"destination\":\"레고랜드\",\"preference\":\"comfort\",\"reason\":\"멀어도 쾌적한 주차장을 원한다고 해석했습니다.\"}",
+    "반드시 JSON만 반환해라. 예: {\"destination\":\"백록관\",\"preference\":\"near\",\"reason\":\"거동이 불편한 동반자가 있어 가까운 주차장이 필요하다고 해석했습니다.\"}",
     `사용자 입력: ${text}`,
   ].join("\n");
 
 
-  const response = await fetch(`${GEMINI_API_URL}?key=${encodeURIComponent(apiKey)}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: prompt }],
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  let response;
+  try {
+    response = await fetch(`${GEMINI_API_URL}?key=${encodeURIComponent(apiKey)}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      signal: controller.signal,
+      body: JSON.stringify({
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: prompt }],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 180,
+          responseMimeType: "application/json",
         },
-      ],
-      generationConfig: {
-        temperature: 0.2,
-        maxOutputTokens: 180,
-        responseMimeType: "application/json",
-      },
-    }),
-  });
+      }),
+    });
+  } finally {
+    clearTimeout(timer);
+  }
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {

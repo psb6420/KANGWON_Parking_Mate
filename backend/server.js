@@ -6,7 +6,6 @@ const path = require("path");
 const configRouter = require("./routes/config");
 const parkingRouter = require("./routes/parking");
 const statusRouter = require("./routes/status");
-const recommendRouter = require("./routes/recommend");
 const arduinoRouter = require("./routes/arduino");
 const destinationsRouter = require("./routes/destinations");
 const pushRouter = require("./routes/push");
@@ -39,7 +38,6 @@ app.use(express.static(path.join(__dirname, "public")));
 app.use("/api/config", configRouter);
 app.use("/api/parking", statusRouter);    // POST /api/parking/status  ← Arduino
 app.use("/api/parking", parkingRouter);
-app.use("/api/recommend", recommendRouter);
 app.use("/api/arduino", arduinoRouter);
 app.use("/api/destinations", destinationsRouter);
 app.use("/api/push", pushRouter);

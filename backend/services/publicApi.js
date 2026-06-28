@@ -1,7 +1,6 @@
 const fetch = require("node-fetch");
 
 const BASE_GANGNEUNG = "https://apis.data.go.kr/4201000/GNitsTrafficInfoService_1.0";
-const BASE_WEATHER = "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0";
 const BASE_TOURISM = "https://apis.data.go.kr/B551011/KorService1";
 const BASE_KAKAO = "https://dapi.kakao.com";
 
@@ -37,20 +36,6 @@ async function fetchGangneungParking(serviceKey, endpoint, pageNo = 1) {
   const data = await fetchJson(url);
   const code = data?.header?.resultCode;
   if (code && code !== "00") throw new Error(data?.header?.resultMsg || "API error");
-  return data;
-}
-
-async function fetchWeatherForecast(serviceKey, nx, ny) {
-  const now = new Date();
-  const baseDate = formatKstDate(now);
-  const baseTime = getBaseTime(now);
-  const url = appendKey(
-    `${BASE_WEATHER}/getVilageFcst?pageNo=1&numOfRows=60&dataType=JSON&base_date=${baseDate}&base_time=${baseTime}&nx=${nx}&ny=${ny}`,
-    serviceKey,
-  );
-  const data = await fetchJson(url);
-  const code = data?.response?.header?.resultCode;
-  if (code && code !== "00") throw new Error(data?.response?.header?.resultMsg || "Weather API error");
   return data;
 }
 
@@ -111,66 +96,10 @@ async function searchKakaoParkingNearby(kakaoRestKey, x, y, radius = 1000) {
   return data;
 }
 
-function latLngToGrid(lat, lng) {
-  const RE = 6371.00877;
-  const GRID = 5.0;
-  const SLAT1 = 30.0;
-  const SLAT2 = 60.0;
-  const OLON = 126.0;
-  const OLAT = 38.0;
-  const XO = 43;
-  const YO = 136;
-  const DEGRAD = Math.PI / 180.0;
-
-  const re = RE / GRID;
-  const slat1 = SLAT1 * DEGRAD;
-  const slat2 = SLAT2 * DEGRAD;
-  const olon = OLON * DEGRAD;
-  const olat = OLAT * DEGRAD;
-
-  let sn = Math.tan(Math.PI * 0.25 + slat2 * 0.5) / Math.tan(Math.PI * 0.25 + slat1 * 0.5);
-  sn = Math.log(Math.cos(slat1) / Math.cos(slat2)) / Math.log(sn);
-  let sf = Math.tan(Math.PI * 0.25 + slat1 * 0.5);
-  sf = (Math.pow(sf, sn) * Math.cos(slat1)) / sn;
-  let ro = Math.tan(Math.PI * 0.25 + olat * 0.5);
-  ro = (re * sf) / Math.pow(ro, sn);
-
-  const ra = Math.tan(Math.PI * 0.25 + lat * DEGRAD * 0.5);
-  const r = (re * sf) / Math.pow(ra, sn);
-  let theta = lng * DEGRAD - olon;
-  if (theta > Math.PI) theta -= 2.0 * Math.PI;
-  if (theta < -Math.PI) theta += 2.0 * Math.PI;
-  theta *= sn;
-
-  return {
-    nx: Math.floor(r * Math.sin(theta) + XO + 0.5),
-    ny: Math.floor(ro - r * Math.cos(theta) + YO + 0.5),
-  };
-}
-
-function formatKstDate(date) {
-  const kst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
-  return kst.toISOString().slice(0, 10).replace(/-/g, "");
-}
-
-function getBaseTime(date) {
-  const kst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
-  const hour = kst.getUTCHours();
-  const minute = kst.getUTCMinutes();
-  const baseTimes = [2, 5, 8, 11, 14, 17, 20, 23];
-  let base = baseTimes[0];
-  for (const t of baseTimes) {
-    if (hour > t || (hour === t && minute >= 10)) base = t;
-  }
-  return `${String(base).padStart(2, "0")}00`;
-}
-
 module.exports = {
   fetchGangneungParking,
-  fetchWeatherForecast,
   fetchGangwonTourism,
   fetchGangwonEvents,
   searchKakaoPlace,
   searchKakaoParkingNearby,
-  latLngToGrid,
 };
