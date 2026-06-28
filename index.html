@@ -1792,7 +1792,11 @@
           utterance.onend = finish;
           utterance.onerror = finish;
           setTimeout(finish, text.length * 100 + 3000);
-          try { window.speechSynthesis.speak(utterance); } catch { finish(); }
+          try {
+            // iOS: 백그라운드 복귀/유휴 후 speechSynthesis가 묵음 상태로 멈추는 버그 방지
+            window.speechSynthesis.resume();
+            window.speechSynthesis.speak(utterance);
+          } catch { finish(); }
         });
       }
 
@@ -2036,7 +2040,7 @@
           const isIos = /iPhone|iPad|iPod/i.test(navigator.userAgent);
           const isStandalone = window.navigator.standalone === true;
           if (isIos && !isStandalone) {
-            throw new Error("iPhone에서 푸시 알림을 받으려면: Safari로 접속 → 공유(□↑) → '홈 화면에 추가' → 홈 화면 아이콘으로 실행");
+            throw new Error("iPhone(iOS 16.4 이상)에서 푸시 알림을 받으려면: Safari로 접속 → 공유(□↑) → '홈 화면에 추가' → 홈 화면 아이콘으로 실행하세요.");
           }
           throw new Error("이 브라우저는 푸시 알림을 지원하지 않습니다.");
         }
