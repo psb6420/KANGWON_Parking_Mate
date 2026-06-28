@@ -6,6 +6,7 @@ const { fetchGangneungParking } = require("./publicApi");
 const DEFAULT_MONITOR_INTERVAL_MS = 60 * 1000;
 const DEFAULT_WATCH_MINUTES = 120;
 const MAX_WATCH_LOTS = 10;
+const DEFAULT_LOW_SPOTS_THRESHOLD = 3;
 const ARDUINO_LOT_IDS = new Set(["KNU_PARKING_6", "KNU_PARKING_BAENGNOKAN"]);
 
 let monitorTimer = null;
@@ -20,6 +21,13 @@ function monitorIntervalMs() {
   return Math.max(
     30_000,
     positiveNumber(process.env.PUSH_MONITOR_INTERVAL_MS, DEFAULT_MONITOR_INTERVAL_MS),
+  );
+}
+
+function lowSpotsThreshold() {
+  return Math.max(
+    1,
+    Math.round(positiveNumber(process.env.PUSH_LOW_SPOTS_THRESHOLD, DEFAULT_LOW_SPOTS_THRESHOLD)),
   );
 }
 
@@ -251,18 +259,45 @@ async function fetchCurrentStates(managementNos, db) {
   return states;
 }
 
-function describeChange(change) {
-  if (change.current === 0 && change.previous > 0) {
-    return `${change.name} 만차 (${change.previous}→0)`;
-  }
-  if (change.previous === 0 && change.current > 0) {
-    return `${change.name} 빈자리 ${change.current}면 발생`;
-  }
-  const direction = change.current > change.previous ? "증가" : "감소";
-  return `${change.name} ${change.previous}→${change.current}면 ${direction}`;
+// 잔여면 ±1 같은 미세 변동은 무시하고 의미 있는 임계값 전환에서만 알림.
+// - full   : 만차 진입 (previous>0 → 0)
+// - opened : 빈자리 발생 (0 → current>0)
+// - low    : 잔여면이 임계값 이하로 처음 진입 (previous>low → current<=low)
+function classifyChange(previous, current, low) {
+  if (previous === null || current === previous) return null;
+  if (current === 0 && previous > 0) return "full";
+  if (previous === 0 && current > 0) return "opened";
+  if (current <= low && previous > low) return "low";
+  return null; // 그 외(임계값 위에서의 미세 증감, 임계값 아래에서의 추가 감소)는 무시
 }
 
-function reroutePayload(watch, fullLotName, nextLot) {
+function describeChange(change) {
+  switch (change.type) {
+    case "full":
+      return `${change.name} 만차 (${change.previous}→0)`;
+    case "opened":
+      return `${change.name} 빈자리 ${change.current}면 발생`;
+    case "low":
+      return `${change.name} 잔여 ${change.current}면 (곧 만차)`;
+    default:
+      return `${change.name} ${change.previous}→${change.current}면`;
+  }
+}
+
+// 포그라운드(앱이 켜진 상태)에서 인앱 상태바를 그릴 수 있도록 감시 중인 모든 주차장의 현재 현황을 동봉
+function buildLotsSnapshot(watch, states) {
+  return watch.lots.map((lot) => {
+    const state = states.get(lot.management_no);
+    return {
+      managementNo: lot.management_no,
+      name: lot.name,
+      available: state?.available ?? integerOrNull(lot.last_available),
+      total: state?.total ?? integerOrNull(lot.total_spots),
+    };
+  });
+}
+
+function reroutePayload(watch, fullLotName, nextLot, snapshot, changes) {
   return {
     title: `${fullLotName} 만차`,
     body: `${nextLot.name}으로 경로를 변경할까요? 알림을 눌러 응답하세요.`,
@@ -273,46 +308,32 @@ function reroutePayload(watch, fullLotName, nextLot) {
       action: "reroute",
       fullLotName,
       nextLot: { managementNo: nextLot.management_no, name: nextLot.name, lat: nextLot.lat, lng: nextLot.lng },
+      lots: snapshot,
+      changes,
     },
   };
 }
 
-function notificationPayload(watch, changes) {
+function notificationPayload(watch, changes, snapshot) {
+  const data = { url: "/?view=map", watchId: watch.watch_id, lots: snapshot, changes };
   if (changes.length === 1) {
     const change = changes[0];
-    let title = `${change.name} 잔여 ${change.current}면`;
-    if (change.current === 0 && change.previous > 0) title = `${change.name} 만차`;
-    if (change.previous === 0 && change.current > 0) title = `${change.name} 빈자리 발생`;
+    let title;
+    if (change.type === "full") title = `${change.name} 만차`;
+    else if (change.type === "opened") title = `${change.name} 빈자리 발생`;
+    else title = `${change.name} 잔여 ${change.current}면`;
     return {
       title,
       body: describeChange(change),
       tag: `parking-watch-${watch.watch_id}`,
-      data: { url: "/?view=map", watchId: watch.watch_id },
+      data,
     };
   }
   return {
     title: `추천 주차장 ${changes.length}곳 변경`,
     body: changes.slice(0, 3).map(describeChange).join(" · "),
     tag: `parking-watch-${watch.watch_id}`,
-    data: { url: "/?view=map", watchId: watch.watch_id },
-  };
-}
-
-function statusPayload(watch, lots, states) {
-  const items = lots
-    .map((lot) => {
-      const state = states.get(lot.management_no);
-      const avail = state?.available ?? integerOrNull(lot.last_available);
-      if (avail === null) return null;
-      return avail === 0 ? `${lot.name} 만차` : `${lot.name} ${avail}면`;
-    })
-    .filter(Boolean);
-  const dest = watch.destination_name ? `${watch.destination_name} ` : "";
-  return {
-    title: `${dest}주차 현황 (변동 없음)`,
-    body: items.join(" · ") || "현황 정보 없음",
-    tag: `parking-watch-${watch.watch_id}`,
-    data: { url: "/?view=map", watchId: watch.watch_id },
+    data,
   };
 }
 
@@ -354,45 +375,54 @@ async function runPushMonitor() {
       grouped.get(row.watch_id).lots.push(row);
     }
 
+    const low = lowSpotsThreshold();
+    const updateState = db.prepare(
+      `UPDATE parking_watch_lots
+       SET last_available = ?, total_spots = ?
+       WHERE watch_id = ? AND management_no = ?`,
+    );
+
     let notified = 0;
     for (const watch of grouped.values()) {
       const changes = [];
-      const baselineUpdates = [];
+      const baselineUpdates = []; // 현재 상태가 있는 모든 lot의 최신값(기준값 갱신용)
       for (const lot of watch.lots) {
         const currentState = states.get(lot.management_no);
         if (!currentState || currentState.available === null) continue;
+        baselineUpdates.push({
+          managementNo: lot.management_no,
+          available: currentState.available,
+          total: currentState.total,
+        });
         const previous = integerOrNull(lot.last_available);
-        if (previous === null) {
-          baselineUpdates.push({ lot, currentState });
-          continue;
-        }
-        if (previous !== currentState.available) {
+        const type = classifyChange(previous, currentState.available, low);
+        if (type) {
           changes.push({
             managementNo: lot.management_no,
             name: lot.name,
             previous,
             current: currentState.available,
             total: currentState.total,
+            type,
           });
         }
       }
 
-      const updateState = db.prepare(
-        `UPDATE parking_watch_lots
-         SET last_available = ?, total_spots = ?
-         WHERE watch_id = ? AND management_no = ?`,
-      );
-      for (const update of baselineUpdates) {
-        updateState.run(
-          update.currentState.available,
-          update.currentState.total,
-          watch.watch_id,
-          update.lot.management_no,
-        );
+      const applyBaselines = () => {
+        for (const u of baselineUpdates) {
+          updateState.run(u.available, u.total, watch.watch_id, u.managementNo);
+        }
+      };
+
+      // 의미 있는 임계값 전환이 없으면 알림 없이 기준값만 갱신 (미세 변동 무시)
+      if (!changes.length) {
+        applyBaselines();
+        continue;
       }
 
+      const snapshot = buildLotsSnapshot(watch, states);
       // 만차로 변한 주차장이 있으면 다음 이용 가능한 주차장으로 경로 변경 제안
-      const fullChanges = changes.filter((c) => c.current === 0 && c.previous > 0);
+      const fullChanges = changes.filter((c) => c.type === "full");
       let payload;
       if (fullChanges.length > 0) {
         const fullIds = new Set(fullChanges.map((c) => c.managementNo));
@@ -403,12 +433,10 @@ async function runPushMonitor() {
             return s?.available > 0;
           });
         payload = nextLot
-          ? reroutePayload(watch, fullChanges[0].name, nextLot)
-          : notificationPayload(watch, changes);
+          ? reroutePayload(watch, fullChanges[0].name, nextLot, snapshot, changes)
+          : notificationPayload(watch, changes, snapshot);
       } else {
-        payload = changes.length
-          ? notificationPayload(watch, changes)
-          : statusPayload(watch, watch.lots, states);
+        payload = notificationPayload(watch, changes, snapshot);
       }
 
       const subscription = {
@@ -421,9 +449,7 @@ async function runPushMonitor() {
           JSON.stringify(payload),
           { TTL: 120 },
         );
-        for (const change of changes) {
-          updateState.run(change.current, change.total, watch.watch_id, change.managementNo);
-        }
+        applyBaselines(); // 전송 성공 시에만 기준값 갱신 → 실패 시 다음 주기에 재시도
         notified += 1;
       } catch (error) {
         if (error.statusCode === 404 || error.statusCode === 410) {

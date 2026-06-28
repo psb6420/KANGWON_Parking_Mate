@@ -1002,6 +1002,15 @@
         color: #0f7043;
       }
 
+      .push-watch-status.flash {
+        animation: pushWatchFlash 1.6s ease-out;
+      }
+
+      @keyframes pushWatchFlash {
+        0% { background: #ffe7a1; border-color: #f0b429; box-shadow: 0 0 0 3px rgba(240, 180, 41, 0.35); }
+        100% { box-shadow: 0 0 0 0 rgba(240, 180, 41, 0); }
+      }
+
       .push-watch-stop {
         flex: 0 0 auto;
         min-height: 30px;
@@ -1969,6 +1978,57 @@
             else statusEl.textContent = `${secs}초 후 자동으로 경로를 변경합니다 · 아니오로 취소`;
           }, 1000);
         }
+      }
+
+      // 앱이 켜져 있을 때(포그라운드) 도착한 푸시: OS 팝업 대신 인앱 상태바 + 음성으로 처리
+      function handleForegroundParkingAlert(payload) {
+        if (!payload) return;
+        const data = payload.data || {};
+        const changes = Array.isArray(data.changes) ? data.changes : [];
+
+        // 감시 중인 주차장 현재 현황을 상태바에 라이브로 갱신
+        const lots = Array.isArray(data.lots) ? data.lots : [];
+        const summary = lots
+          .map((lot) => {
+            if (lot.available === null || lot.available === undefined) return null;
+            return lot.available === 0 ? `${lot.name} 만차` : `${lot.name} ${lot.available}면`;
+          })
+          .filter(Boolean)
+          .join(" · ");
+        updatePushWatchStatus(summary || payload.body || "추천 주차장 잔여면이 변경되었습니다.");
+        flashPushWatchStatus();
+
+        // 만차 → 경로 변경 제안 (기존 음성 리루팅 플로우 재사용)
+        if (data.action === "reroute" && data.nextLot) {
+          startRerouteFlow(data);
+          return;
+        }
+
+        // 그 외 의미 있는 변동은 음성으로 안내 (확인용 알림 등 변동이 없으면 음성 생략)
+        if (changes.length) {
+          const spoken = changes.length === 1
+            ? spokenForChange(changes[0])
+            : `추천 주차장 ${changes.length}곳의 잔여면이 변경되었습니다.`;
+          if (spoken) speak(spoken);
+        }
+      }
+
+      function spokenForChange(c) {
+        if (!c) return "";
+        if (c.type === "full") return `${c.name}이 만차입니다.`;
+        if (c.type === "opened") return `${c.name}에 빈자리 ${c.current}면이 생겼습니다.`;
+        if (c.type === "low") return `${c.name} 잔여 ${c.current}면, 곧 만차입니다.`;
+        return `${c.name} 잔여 ${c.current}면입니다.`;
+      }
+
+      function flashPushWatchStatus() {
+        if (!pushWatchStatusEl) return;
+        pushWatchStatusEl.hidden = false;
+        pushWatchStatusEl.classList.remove("flash");
+        // reflow 후 클래스 재적용 → 매번 애니메이션 재생
+        void pushWatchStatusEl.offsetWidth;
+        pushWatchStatusEl.classList.add("flash");
+        setTimeout(() => pushWatchStatusEl.classList.remove("flash"), 1600);
       }
 
       async function startRecommendationPushWatch(navigatedItem) {
@@ -3847,6 +3907,8 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
             startRerouteFlow(event.data);
           } else if (event.data?.type === "switch-view") {
             setActiveView(event.data.view || "map");
+          } else if (event.data?.type === "parking-foreground-alert") {
+            handleForegroundParkingAlert(event.data.payload);
           }
         });
       }
