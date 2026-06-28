@@ -26,9 +26,9 @@ const unsigned long HEARTBEAT_INTERVAL = 20000; // 생존 신고 전송 주기: 
 // ==========================================
 // 통신 설정 (본인 환경에 맞게 수정하세요)
 // ==========================================
-const char* ssid = "iPhone";         // 와이파이 이름
-const char* password = "qwertyu12"; // 와이파이 비밀번호
-const char* serverUrl = "http://172.20.10.2:8000/api/parking/status"; // 통신할 서버 URL
+const char* ssid = "lim";         // 와이파이 이름
+const char* password = "chulan2134"; // 와이파이 비밀번호
+const char* serverUrl = "http://192.168.0.6:8000/api/parking/status"; // 통신할 서버 URL
 const String parkingSpotId = "SPOT_01";      // 주차 구역 ID
 
 // ==========================================
