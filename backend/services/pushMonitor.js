@@ -301,8 +301,8 @@ function buildLotsSnapshot(watch, states) {
 
 function reroutePayload(watch, fullLotName, nextLot, snapshot, changes) {
   return {
-    title: `${fullLotName} 만차`,
-    body: `${nextLot.name}으로 경로를 변경할까요? 알림을 눌러 응답하세요.`,
+    title: `${fullLotName} 만차 — 경로 변경 안내`,
+    body: `${fullLotName}이 만차입니다. ${nextLot.name}(으)로 안내해드릴까요? 알림을 눌러 응답하세요.`,
     tag: `parking-watch-${watch.watch_id}`,
     data: {
       url: "/?view=map",
