@@ -145,6 +145,7 @@ function initSchema(db) {
   try { db.exec("ALTER TABLE parking_watch_lots ADD COLUMN lat REAL"); } catch {}
   try { db.exec("ALTER TABLE parking_watch_lots ADD COLUMN lng REAL"); } catch {}
   try { db.exec("ALTER TABLE parking_watch_lots ADD COLUMN ranking INTEGER DEFAULT 0"); } catch {}
+  try { db.exec("ALTER TABLE parking_watch_lots ADD COLUMN is_navigated INTEGER DEFAULT 0"); } catch {}
   seedDefaultArduinoLots(db);
 }
 

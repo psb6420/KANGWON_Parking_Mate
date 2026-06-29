@@ -77,6 +77,7 @@ function normalizeLots(lots) {
       lat: Number.isFinite(lat) ? lat : null,
       lng: Number.isFinite(lng) ? lng : null,
       ranking: Number.isFinite(Number(lot?.ranking)) ? Number(lot.ranking) : 0,
+      navigated: Boolean(lot?.navigated),
     });
     if (normalized.length >= MAX_WATCH_LOTS) break;
   }
@@ -145,11 +146,14 @@ async function registerWatch({ subscription, lots, destinationName, durationMinu
 
     const insertLot = db.prepare(
       `INSERT INTO parking_watch_lots
-       (watch_id, management_no, name, last_available, total_spots, lat, lng, ranking)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+       (watch_id, management_no, name, last_available, total_spots, lat, lng, ranking, is_navigated)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     for (const lot of normalizedLots) {
-      insertLot.run(watchId, lot.managementNo, lot.name, lot.available, lot.total, lot.lat, lot.lng, lot.ranking);
+      insertLot.run(
+        watchId, lot.managementNo, lot.name, lot.available, lot.total,
+        lot.lat, lot.lng, lot.ranking, lot.navigated ? 1 : 0,
+      );
     }
     db.exec("COMMIT");
   } catch (error) {
@@ -301,8 +305,8 @@ function buildLotsSnapshot(watch, states) {
 
 function reroutePayload(watch, fullLotName, nextLot, snapshot, changes) {
   return {
-    title: `${fullLotName} 만차 — 경로 변경 안내`,
-    body: `${fullLotName}이 만차입니다. ${nextLot.name}(으)로 안내해드릴까요? 알림을 눌러 응답하세요.`,
+    title: `${fullLotName} 만차 — 다른 주차장 추천`,
+    body: `${fullLotName}이 만차입니다. 다른 주차장 ${nextLot.name}(으)로 추천해드릴까요? 알림을 눌러 응답하세요.`,
     tag: `parking-watch-${watch.watch_id}`,
     data: {
       url: "/?view=map",
@@ -362,7 +366,7 @@ async function runPushMonitor() {
         `SELECT w.watch_id, w.endpoint, w.destination_name, w.expires_at,
                 s.p256dh, s.auth,
                 l.management_no, l.name, l.last_available, l.total_spots,
-                l.lat, l.lng, l.ranking
+                l.lat, l.lng, l.ranking, l.is_navigated
          FROM parking_watch_sessions w
          JOIN push_subscriptions s ON s.endpoint = w.endpoint
          JOIN parking_watch_lots l ON l.watch_id = w.watch_id
@@ -416,16 +420,24 @@ async function runPushMonitor() {
         }
       };
 
-      // 현재 만차(잔여 0)인 감시 주차장과 대체 가능한(잔여>0) 주차장 파악.
-      // 추천 주차장이 만차이면 잔여면 변동이 없어도 매 주기 경로 변경을 다시 제안한다
-      // (사용자가 응답하거나 빈자리가 날 때까지 30초마다 상시 재안내).
-      const fullLots = watch.lots
-        .filter((l) => states.get(l.management_no)?.available === 0)
-        .sort((a, b) => (a.ranking ?? 99) - (b.ranking ?? 99));
+      // 카카오내비로 길안내 중인(선택한) 주차장만 만차 재안내 대상.
+      // 그 주차장이 현재 만차(잔여 0)이면 잔여면 변동이 없어도 매 주기 경로 변경을
+      // 다시 제안한다(응답하거나 빈자리가 날 때까지 30초마다 상시 재안내).
+      // is_navigated 표시가 없는(구버전) 감시는 최상위 순위 주차장을 길안내 대상으로 간주.
+      const navigatedLot =
+        watch.lots.find((l) => l.is_navigated) ||
+        [...watch.lots].sort((a, b) => (a.ranking ?? 99) - (b.ranking ?? 99))[0];
+      const navigatedFull =
+        navigatedLot && states.get(navigatedLot.management_no)?.available === 0;
       const nextLot = watch.lots
-        .filter((l) => l.lat && l.lng && states.get(l.management_no)?.available > 0)
+        .filter(
+          (l) =>
+            l.management_no !== navigatedLot?.management_no &&
+            l.lat && l.lng &&
+            states.get(l.management_no)?.available > 0,
+        )
         .sort((a, b) => (a.ranking ?? 99) - (b.ranking ?? 99))[0];
-      const shouldReroute = fullLots.length > 0 && Boolean(nextLot);
+      const shouldReroute = Boolean(navigatedFull && nextLot);
 
       // 보낼 이유가 없으면(잔여면 변동 없음 + 만차 재안내 대상 아님) 기준값만 갱신
       if (!changes.length && !shouldReroute) {
@@ -434,9 +446,9 @@ async function runPushMonitor() {
       }
 
       const snapshot = buildLotsSnapshot(watch, states);
-      // 만차인 추천 주차장이 있으면 다음 이용 가능한 주차장으로 경로 변경을 반복 제안
+      // 길안내 중인 주차장이 만차이면 다른 이용 가능한 주차장으로 경로 변경을 반복 제안
       const payload = shouldReroute
-        ? reroutePayload(watch, fullLots[0].name, nextLot, snapshot, changes)
+        ? reroutePayload(watch, navigatedLot.name, nextLot, snapshot, changes)
         : notificationPayload(watch, changes, snapshot);
 
       const subscription = {

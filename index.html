@@ -1867,6 +1867,11 @@
           .filter((row) => Number.isFinite(row.destinationDistanceM))
           .slice(0, 3);
         const rows = recommendations.length ? recommendations : [navigatedItem];
+        // 카카오내비로 길안내를 시작한(선택한) 주차장이 감시 목록에 없으면 맨 앞에 추가
+        const navNo = navigatedItem?.managementNo;
+        if (navNo && !rows.some((row) => row.managementNo === navNo)) {
+          rows.unshift(navigatedItem);
+        }
         return rows.map((row, index) => ({
           managementNo: row.managementNo,
           name: row.name || "주차장",
@@ -1875,6 +1880,8 @@
           lat: row.lat,
           lng: row.lng,
           ranking: index + 1,
+          // 길안내 중인 바로 그 주차장만 만차 시 재안내 대상으로 표시
+          navigated: navNo ? row.managementNo === navNo : index === 0,
         }));
       }
 
