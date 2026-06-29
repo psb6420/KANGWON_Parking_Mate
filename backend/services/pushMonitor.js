@@ -420,24 +420,29 @@ async function runPushMonitor() {
         }
       };
 
-      // 카카오내비로 길안내 중인(선택한) 주차장만 만차 재안내 대상.
-      // 그 주차장이 현재 만차(잔여 0)이면 잔여면 변동이 없어도 매 주기 경로 변경을
-      // 다시 제안한다(응답하거나 빈자리가 날 때까지 30초마다 상시 재안내).
-      // is_navigated 표시가 없는(구버전) 감시는 최상위 순위 주차장을 길안내 대상으로 간주.
-      const navigatedLot =
-        watch.lots.find((l) => l.is_navigated) ||
-        [...watch.lots].sort((a, b) => (a.ranking ?? 99) - (b.ranking ?? 99))[0];
-      const navigatedFull =
-        navigatedLot && states.get(navigatedLot.management_no)?.available === 0;
-      const nextLot = watch.lots
-        .filter(
-          (l) =>
-            l.management_no !== navigatedLot?.management_no &&
-            l.lat && l.lng &&
-            states.get(l.management_no)?.available > 0,
-        )
-        .sort((a, b) => (a.ranking ?? 99) - (b.ranking ?? 99))[0];
-      const shouldReroute = Boolean(navigatedFull && nextLot);
+      // 만차 재안내 대상(fullLot) 선정. 만차이면 잔여면 변동이 없어도 매 주기
+      // 경로 변경을 다시 제안한다(응답하거나 빈자리가 날 때까지 30초마다 상시 재안내).
+      // - 새 클라이언트: is_navigated로 표시된, 길안내 중인 바로 그 주차장이 만차일 때만
+      // - 구버전(플래그 없음): 만차인 감시 주차장 중 추천순위 최상위를 대상으로 폴백
+      const availableOf = (l) => states.get(l.management_no)?.available;
+      const navigatedLot = watch.lots.find((l) => l.is_navigated);
+      const fullLot = navigatedLot
+        ? (availableOf(navigatedLot) === 0 ? navigatedLot : null)
+        : watch.lots
+            .filter((l) => availableOf(l) === 0)
+            .sort((a, b) => (a.ranking ?? 99) - (b.ranking ?? 99))[0] || null;
+      // 길안내 중인 주차장을 제외한, 이용 가능한(잔여>0) 다른 추천 주차장 중 최상위
+      const nextLot = fullLot
+        ? watch.lots
+            .filter(
+              (l) =>
+                l.management_no !== fullLot.management_no &&
+                l.lat && l.lng &&
+                availableOf(l) > 0,
+            )
+            .sort((a, b) => (a.ranking ?? 99) - (b.ranking ?? 99))[0]
+        : null;
+      const shouldReroute = Boolean(fullLot && nextLot);
 
       // 보낼 이유가 없으면(잔여면 변동 없음 + 만차 재안내 대상 아님) 기준값만 갱신
       if (!changes.length && !shouldReroute) {
@@ -448,7 +453,7 @@ async function runPushMonitor() {
       const snapshot = buildLotsSnapshot(watch, states);
       // 길안내 중인 주차장이 만차이면 다른 이용 가능한 주차장으로 경로 변경을 반복 제안
       const payload = shouldReroute
-        ? reroutePayload(watch, navigatedLot.name, nextLot, snapshot, changes)
+        ? reroutePayload(watch, fullLot.name, nextLot, snapshot, changes)
         : notificationPayload(watch, changes, snapshot);
 
       const subscription = {
