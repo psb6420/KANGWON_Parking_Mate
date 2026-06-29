@@ -2511,20 +2511,32 @@
             return;
           }
           const places = new kakao.maps.services.Places();
-          const query = `강원 ${keyword}`;
-          places.keywordSearch(query, (data, status) => {
-            if (status !== kakao.maps.services.Status.OK || !data.length) {
-              reject(new Error(`"${keyword}" 목적지를 찾지 못했습니다.`));
-              return;
-            }
+
+          function pickResult(data, kw) {
             const gangwonMatch =
               data.find((place) => /강원|강릉|춘천|원주|속초|동해|삼척|양양|평창|정선/.test(place.address_name || "")) ||
               data[0];
             resolve({
-              name: gangwonMatch.place_name || keyword,
+              name: gangwonMatch.place_name || kw,
               address: gangwonMatch.address_name || "",
               lat: Number(gangwonMatch.y),
               lng: Number(gangwonMatch.x),
+            });
+          }
+
+          // 1차: "강원 {keyword}"
+          places.keywordSearch(`강원 ${keyword}`, (data, status) => {
+            if (status === kakao.maps.services.Status.OK && data.length) {
+              pickResult(data, keyword);
+              return;
+            }
+            // 2차: keyword 단독 (강원 prefix 없이)
+            places.keywordSearch(keyword, (data2, status2) => {
+              if (status2 === kakao.maps.services.Status.OK && data2.length) {
+                pickResult(data2, keyword);
+                return;
+              }
+              reject(new Error(`"${keyword}" 목적지를 찾지 못했습니다.`));
             });
           });
         });
@@ -2668,7 +2680,18 @@
           searchFeedbackEl.textContent = "AI가 목적지와 주차 선호를 분석하는 중입니다.";
           const parsed = await analyzeParkingIntent(query);
           searchFeedbackEl.textContent = `"${parsed.destination}" 목적지를 찾는 중입니다.`;
-          const destination = await searchDestinationPlace(parsed.destination);
+          let destination;
+          try {
+            destination = await searchDestinationPlace(parsed.destination);
+          } catch {
+            // AI/fallback이 잘못 추출한 경우 원문으로 재시도
+            if (query !== parsed.destination) {
+              searchFeedbackEl.textContent = `"${query}" 목적지를 찾는 중입니다.`;
+              destination = await searchDestinationPlace(query);
+            } else {
+              throw new Error(`"${parsed.destination}" 목적지를 찾지 못했습니다.`);
+            }
+          }
           lastDestination = destination;
 const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference);
           const within1500 = ranked.filter(

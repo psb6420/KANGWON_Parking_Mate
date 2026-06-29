@@ -599,7 +599,7 @@ function fallbackParkingIntent(text) {
   let preference = "balanced";
   if (/쾌적|여유|한산|널널|자리|혼잡하지|안\s*붐비|멀어도/.test(compact)) {
     preference = "comfort";
-  } else if (/가까|근처|인근|도보|최단|가장\s*가까|거동|불편|노인|어르신|할머니|할아버지|휠체어|장애|아기|유아|아이랑|어린이|짐이\s*많|짐\s*많|무거|급하|빨리/.test(compact)) {
+  } else if (/가까|근처|인근|도보|최단|가장\s*가까|거동|불편|노인|어르신|할머니|할아버지|휠체어|장애|아기|유아|아이랑|아이들|어린이|짐이\s*많|짐\s*많|무거|급하|빨리/.test(compact)) {
     preference = "near";
   }
 
@@ -624,6 +624,19 @@ function fallbackParkingIntent(text) {
   if (beforeVerb) {
     const c = extractCandidate(beforeVerb[1]);
     if (c) return { destination: c, preference, reason: FALLBACK_REASON, usedAi: false };
+  }
+
+  // 오타 포함 역방향 추출: 마지막 단어가 갈/가-로 시작하는 동사형이면 그 앞 단어를 목적지로
+  const words = compact.split(/\s+/);
+  if (words.length >= 2) {
+    const last = words[words.length - 1];
+    if (/^(?:갈|가)[가-힣]*/.test(last)) {
+      // 뒤에서 connector(이랑/랑/와/과) 붙은 단어는 건너뜀
+      for (let i = words.length - 2; i >= 0; i--) {
+        const c = extractCandidate(words[i]);
+        if (c) return { destination: c, preference, reason: FALLBACK_REASON, usedAi: false };
+      }
+    }
   }
 
   let destination = compact
@@ -659,7 +672,9 @@ function parseGeminiJson(text) {
 
 function normalizeParkingIntent(payload, originalText, usedAi) {
   const fallback = fallbackParkingIntent(originalText);
-  const destination = String(payload?.destination || fallback.destination || originalText).trim();
+  const rawDest = String(payload?.destination || "").trim();
+  const validDest = rawDest && !["unknown", "없음", "null", "none"].includes(rawDest.toLowerCase());
+  const destination = validDest ? rawDest : (fallback.destination || originalText);
   const reason = String(payload?.reason || fallback.reason || "").trim();
   return {
     destination: destination || originalText,
