@@ -1686,9 +1686,28 @@
       const REALTIME_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
       const runtimeConfig = window.PARKING_MATE_RUNTIME_CONFIG || {};
       const appApiOrigin = String(runtimeConfig.appApiOrigin || "").trim().replace(/\/$/, "");
-      let parkingBackendOrigin = String(
+      // LAN(휴대폰) 접속 시 백엔드 주소가 localhost로 내려오면 폰에서 도달 불가하므로,
+      // 페이지가 localhost가 아닌 호스트에서 열렸으면 백엔드 호스트도 같은 호스트로 치환한다(포트 유지).
+      const resolveBackendOrigin = (origin) => {
+        const raw = String(origin || "").trim().replace(/\/$/, "");
+        if (!raw) return raw;
+        const pageHost = window.location.hostname;
+        const pageIsLocal = pageHost === "localhost" || pageHost === "127.0.0.1";
+        if (pageIsLocal) return raw;
+        try {
+          const url = new URL(raw);
+          if (url.hostname === "localhost" || url.hostname === "127.0.0.1") {
+            url.hostname = pageHost;
+            return url.toString().replace(/\/$/, "");
+          }
+        } catch {
+          // URL 파싱 실패 시 원본 유지
+        }
+        return raw;
+      };
+      let parkingBackendOrigin = resolveBackendOrigin(
         runtimeConfig.backendOrigin || `${window.location.protocol}//${window.location.hostname}:3001`,
-      ).trim().replace(/\/$/, "");
+      );
       const appApiUrl = (path) => `${appApiOrigin}${path}`;
       const backendFetch = (path, options = {}) => {
         const isNgrok = parkingBackendOrigin.includes("ngrok");
@@ -2875,7 +2894,7 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
             const kakaoKey = String(config.kakaoJavascriptKey || "").trim();
             if (kakaoKey) clientKakaoKey = kakaoKey;
             const backendOrigin = String(config.parkingBackendOrigin || "").trim();
-            if (backendOrigin) parkingBackendOrigin = backendOrigin.replace(/\/$/, "");
+            if (backendOrigin) parkingBackendOrigin = resolveBackendOrigin(backendOrigin);
           })
           .catch(() => {});
         return clientConfigLoadingPromise;

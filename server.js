@@ -1,4 +1,5 @@
 const http = require("node:http");
+const https = require("node:https");
 const fs = require("node:fs");
 const path = require("node:path");
 const { URL } = require("node:url");
@@ -8,6 +9,10 @@ loadEnvFile(path.join(__dirname, "backend", ".env"));
 
 const PORT = 8080;
 const ROOT = __dirname;
+// 장시간 실행되는 단독 프론트 서버에서만 백엔드 프록시를 켠다.
+// (Vercel 서버리스는 server.js를 require로 로드 → require.main !== module → SSE 중계 불가하므로 끔)
+const BACKEND_PROXY_ENABLED = require.main === module && !process.env.VERCEL;
+const BACKEND_PROXY_PREFIXES = ["/api/arduino/", "/api/push/", "/api/parking/status"];
 const GANGNEUNG_API_ROOT = "https://apis.data.go.kr/4201000/GNitsTrafficInfoService_1.0";
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 const FETCH_TIMEOUT_MS = 30000;
@@ -555,12 +560,57 @@ async function proxyParking(reqUrl, res) {
 }
 
 function proxyClientConfig(res) {
+  const backendOrigin = cleanSecret(process.env.PARKING_BACKEND_ORIGIN);
+  // 프록시가 켜져 있고 중계할 백엔드 주소가 있으면, 클라이언트는 same-origin(빈 문자열)으로
+  // 백엔드를 호출하게 하고 프론트 서버가 :8000으로 중계한다. 그러면 휴대폰은 :8080 한 곳만 보면 된다.
+  const proxyEnabled = BACKEND_PROXY_ENABLED && Boolean(backendOrigin);
   sendJson(res, 200, {
     kakaoJavascriptKey: cleanSecret(process.env.KAKAO_JAVASCRIPT_KEY),
     hasDataServiceKey: Boolean(cleanSecret(process.env.DATA_GO_KR_SERVICE_KEY)),
     hasGeminiKey: Boolean(cleanSecret(process.env.GEMINI_API_KEY)),
-    parkingBackendOrigin: cleanSecret(process.env.PARKING_BACKEND_ORIGIN),
+    parkingBackendOrigin: proxyEnabled ? "" : backendOrigin,
+    backendProxy: proxyEnabled,
   });
+}
+
+// 백엔드(:8000)로의 요청을 그대로 중계한다. SSE(text/event-stream)도 스트리밍으로 통과시킨다.
+function proxyToBackend(req, res, reqUrl) {
+  const target = cleanSecret(process.env.PARKING_BACKEND_ORIGIN);
+  if (!target) {
+    sendJson(res, 502, { status: "failed", message: "Backend origin is not configured." });
+    return;
+  }
+  let targetUrl;
+  try {
+    targetUrl = new URL(reqUrl.pathname + reqUrl.search, target);
+  } catch {
+    sendJson(res, 502, { status: "failed", message: "Invalid backend origin." });
+    return;
+  }
+  const client = targetUrl.protocol === "https:" ? https : http;
+  const headers = { ...req.headers };
+  headers.host = targetUrl.host;
+  delete headers["accept-encoding"]; // 압축 해제로 SSE 스트림이 끊기지 않도록 평문으로 받는다
+  if (targetUrl.hostname.includes("ngrok")) headers["ngrok-skip-browser-warning"] = "1";
+
+  const proxyReq = client.request(
+    targetUrl,
+    { method: req.method, headers },
+    (proxyRes) => {
+      res.writeHead(proxyRes.statusCode || 502, proxyRes.headers);
+      proxyRes.pipe(res);
+    },
+  );
+  proxyReq.setTimeout(0); // SSE 장시간 연결이 타임아웃으로 끊기지 않게 한다
+  proxyReq.on("error", (error) => {
+    if (!res.headersSent) {
+      sendJson(res, 502, { status: "failed", message: `Backend proxy error: ${error.message}` });
+    } else {
+      res.end();
+    }
+  });
+  req.on("aborted", () => proxyReq.destroy());
+  req.pipe(proxyReq);
 }
 
 function readJsonBody(req) {
@@ -690,13 +740,19 @@ async function analyzeParkingIntent(text) {
 
   const prompt = [
     "너는 강원 Parking Mate의 주차 추천 의도 분석기다.",
-    "사용자 문장에서 목적지와 주차 선호를 추출해라.",
+    "아래 '사용자 입력' 문장에서 목적지(destination)와 주차 선호(preference)를 추출해라.",
+    "destination은 사용자가 실제로 언급한 장소/지명만 넣는다. 장소가 없으면 \"unknown\"으로 둔다.",
     "preference는 다음 중 하나만 사용한다: near, comfort, balanced.",
     "- near: 가까움, 도보, 최단거리, 근처를 원함. 또는 거동 불편, 노인/어르신/할머니/할아버지 동반, 휠체어, 장애, 아기/유아/어린이 동반, 짐이 많음, 급함 등 가까운 주차가 필요한 상황",
     "- comfort: 멀어도 됨, 여유, 쾌적, 혼잡 회피, 자리 많음을 원함",
     "- balanced: 명확한 선호가 없거나 둘 다 균형",
-    "반드시 JSON만 반환해라. 예: {\"destination\":\"백록관\",\"preference\":\"near\",\"reason\":\"거동이 불편한 동반자가 있어 가까운 주차장이 필요하다고 해석했습니다.\"}",
-    `사용자 입력: ${text}`,
+    "reason은 위 분류를 왜 그렇게 했는지 사용자 입력 근거로 1문장으로 적는다.",
+    "출력은 {\"destination\":string,\"preference\":\"near\"|\"comfort\"|\"balanced\",\"reason\":string} 형식의 JSON만 반환한다.",
+    "아래 예시는 형식 참고용일 뿐이다. 예시의 값(장소명·문구)을 절대 그대로 복사하지 말고 반드시 실제 사용자 입력에서 추출해라.",
+    "예시1) 입력: \"경포해변 근처 가까운 주차장\" -> {\"destination\":\"경포해변\",\"preference\":\"near\",\"reason\":\"가까운 주차를 원한다고 해석했습니다.\"}",
+    "예시2) 입력: \"오죽헌 갈건데 자리 넉넉한 곳\" -> {\"destination\":\"오죽헌\",\"preference\":\"comfort\",\"reason\":\"여유로운 주차를 원한다고 해석했습니다.\"}",
+    "예시3) 입력: \"주차장 추천해줘\" -> {\"destination\":\"unknown\",\"preference\":\"balanced\",\"reason\":\"명확한 목적지나 선호가 없어 균형으로 해석했습니다.\"}",
+    `사용자 입력: "${text}"`,
   ].join("\n");
 
 
@@ -904,6 +960,14 @@ function requestHandler(req, res) {
     reqUrl.pathname === "/api/parking/realtime-refresh"
   ) {
     proxyParking(reqUrl, res);
+    return;
+  }
+
+  if (
+    BACKEND_PROXY_ENABLED &&
+    BACKEND_PROXY_PREFIXES.some((prefix) => reqUrl.pathname.startsWith(prefix))
+  ) {
+    proxyToBackend(req, res, reqUrl);
     return;
   }
 
