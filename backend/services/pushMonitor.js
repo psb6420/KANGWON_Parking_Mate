@@ -171,7 +171,8 @@ async function registerWatch({ subscription, lots, destinationName, durationMinu
         tag: `parking-watch-${watchId}`,
         data: { url: "/?view=map", watchId },
       }),
-      { TTL: 120 },
+      // urgency:high → 안드로이드 도즈/절전 모드에서도 FCM이 즉시 깨워 전달 시도
+      { TTL: 120, urgency: "high" },
     );
     confirmationSent = true;
   } catch (error) {
@@ -475,7 +476,8 @@ async function processGroupedWatches(grouped, states, db) {
       keys: { p256dh: watch.p256dh, auth: watch.auth },
     };
     try {
-      await webPush.sendNotification(subscription, JSON.stringify(payload), { TTL: 120 });
+      // urgency:high → 안드로이드 도즈/절전에서도 즉시 깨워 전달(백그라운드 알림 신뢰도↑)
+      await webPush.sendNotification(subscription, JSON.stringify(payload), { TTL: 120, urgency: "high" });
       applyBaselines(); // 전송 성공 시에만 기준값 갱신 → 실패 시 다음 평가에 재시도
       notified += 1;
     } catch (error) {
