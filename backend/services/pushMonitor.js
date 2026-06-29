@@ -3,7 +3,7 @@ const webPush = require("web-push");
 const { getDb } = require("../db");
 const { fetchGangneungParking } = require("./publicApi");
 
-const DEFAULT_MONITOR_INTERVAL_MS = 60 * 1000;
+const DEFAULT_MONITOR_INTERVAL_MS = 30 * 1000;
 const DEFAULT_WATCH_MINUTES = 120;
 const MAX_WATCH_LOTS = 10;
 const DEFAULT_LOW_SPOTS_THRESHOLD = 3;
@@ -416,30 +416,28 @@ async function runPushMonitor() {
         }
       };
 
-      // 의미 있는 임계값 전환이 없으면 알림 없이 기준값만 갱신 (미세 변동 무시)
-      if (!changes.length) {
+      // 현재 만차(잔여 0)인 감시 주차장과 대체 가능한(잔여>0) 주차장 파악.
+      // 추천 주차장이 만차이면 잔여면 변동이 없어도 매 주기 경로 변경을 다시 제안한다
+      // (사용자가 응답하거나 빈자리가 날 때까지 30초마다 상시 재안내).
+      const fullLots = watch.lots
+        .filter((l) => states.get(l.management_no)?.available === 0)
+        .sort((a, b) => (a.ranking ?? 99) - (b.ranking ?? 99));
+      const nextLot = watch.lots
+        .filter((l) => l.lat && l.lng && states.get(l.management_no)?.available > 0)
+        .sort((a, b) => (a.ranking ?? 99) - (b.ranking ?? 99))[0];
+      const shouldReroute = fullLots.length > 0 && Boolean(nextLot);
+
+      // 보낼 이유가 없으면(잔여면 변동 없음 + 만차 재안내 대상 아님) 기준값만 갱신
+      if (!changes.length && !shouldReroute) {
         applyBaselines();
         continue;
       }
 
       const snapshot = buildLotsSnapshot(watch, states);
-      // 만차로 변한 주차장이 있으면 다음 이용 가능한 주차장으로 경로 변경 제안
-      const fullChanges = changes.filter((c) => c.type === "full");
-      let payload;
-      if (fullChanges.length > 0) {
-        const fullIds = new Set(fullChanges.map((c) => c.managementNo));
-        const nextLot = watch.lots
-          .filter((l) => !fullIds.has(l.management_no) && l.lat && l.lng)
-          .find((l) => {
-            const s = states.get(l.management_no);
-            return s?.available > 0;
-          });
-        payload = nextLot
-          ? reroutePayload(watch, fullChanges[0].name, nextLot, snapshot, changes)
-          : notificationPayload(watch, changes, snapshot);
-      } else {
-        payload = notificationPayload(watch, changes, snapshot);
-      }
+      // 만차인 추천 주차장이 있으면 다음 이용 가능한 주차장으로 경로 변경을 반복 제안
+      const payload = shouldReroute
+        ? reroutePayload(watch, fullLots[0].name, nextLot, snapshot, changes)
+        : notificationPayload(watch, changes, snapshot);
 
       const subscription = {
         endpoint: watch.endpoint,

@@ -1917,6 +1917,8 @@
         const doReroute = async () => {
           stopTimer();
           cleanup(true);
+          // 경로를 변경했으므로 만차 재안내 푸시는 중지(계속 울리지 않도록)
+          stopRecommendationPushWatch().catch(() => {});
           speak(`${nextLot.name}으로 경로를 변경합니다.`);
           await new Promise((r) => setTimeout(r, 1000));
           try {
