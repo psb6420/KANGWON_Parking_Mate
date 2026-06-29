@@ -2861,33 +2861,10 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
           (/Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
       }
 
-      // 카카오내비 앱을 직접 실행한다.
-      // iOS(특히 홈화면 PWA)에서는 Kakao.Navi.start()가 앱으로 직접 핸드오프되지 못하고
-      // 카카오 안내 페이지(carner)로 빠지므로, 카카오내비 URL 스킴을 직접 호출해 앱으로 바로 진입한다.
-      // 스킴이 동작하지 않으면(앱 미설치 등) 2초 후 기존 SDK 방식으로 폴백한다.
+      // 카카오내비 앱 실행. (iOS 직접 스킴 호출은 "유효하지 않은 URL"로 실패해 제거,
+      // 기존 Kakao SDK 방식으로 복구)
       async function launchKakaoNavi(destination) {
         const KakaoSdk = window.Kakao?.Navi ? window.Kakao : await loadKakaoNaviSdk();
-        if (isIosDevice() && clientKakaoKey) {
-          const param = encodeURIComponent(
-            JSON.stringify({
-              name: destination.name,
-              x: destination.x,
-              y: destination.y,
-              coord_type: destination.coordType || "wgs84",
-            }),
-          );
-          let switched = false;
-          const onHide = () => { switched = true; };
-          document.addEventListener("visibilitychange", onHide, { once: true });
-          window.location.href = `kakaonavi-sdk://navigate?param=${param}&apiver=1.0&appkey=${clientKakaoKey}`;
-          window.setTimeout(() => {
-            document.removeEventListener("visibilitychange", onHide);
-            if (!switched && document.visibilityState === "visible") {
-              try { KakaoSdk.Navi.start(destination); } catch {}
-            }
-          }, 2000);
-          return;
-        }
         KakaoSdk.Navi.start(destination);
       }
 
