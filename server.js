@@ -861,6 +861,19 @@ async function proxyParkingIntent(req, res) {
 
 function requestHandler(req, res) {
   const reqUrl = new URL(req.url, `http://localhost:${PORT}`);
+  const requestOrigin = String(req.headers.origin || "");
+
+  if (requestOrigin === "https://localhost" || requestOrigin === "http://localhost") {
+    res.setHeader("access-control-allow-origin", requestOrigin);
+    res.setHeader("vary", "Origin");
+    res.setHeader("access-control-allow-headers", "content-type");
+    res.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
+  }
+
+  if (req.method === "OPTIONS") {
+    send(res, 204, "");
+    return;
+  }
 
   if (reqUrl.pathname === "/api/config") {
     proxyClientConfig(res);

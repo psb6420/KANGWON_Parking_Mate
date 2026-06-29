@@ -1,0 +1,71 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace 'com.gangwon.parkingmate'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.gangwon.parkingmate'
+        minSdkVersion 24
+        targetSdkVersion 36
+        versionCode 1
+        versionName '1.0'
+
+        // Host of the live PWA this TWA renders. Referenced by the manifest
+        // intent-filter and the Digital Asset Links statement below.
+        resValue 'string', 'hostName', 'gangwon-do-realtime-parking-map.vercel.app'
+        resValue 'string', 'launchUrl', 'https://gangwon-do-realtime-parking-map.vercel.app/?source=pwa'
+
+        // Digital Asset Links statement consumed by the TWA at runtime. When the
+        // matching /.well-known/assetlinks.json is published on the host, Chrome
+        // verifies it and removes the URL bar (chromeless full-screen app).
+        def assetStatements = '[{ \\"relation\\": [\\"delegate_permission/common.handle_all_urls\\"], ' +
+                '\\"target\\": {\\"namespace\\": \\"web\\", \\"site\\": \\"https://gangwon-do-realtime-parking-map.vercel.app\\"}}]'
+        resValue 'string', 'assetStatements', assetStatements
+    }
+
+    signingConfigs {
+        // Optional release signing via -P properties or environment variables.
+        release {
+            if (project.hasProperty('PARKING_KEYSTORE')) {
+                storeFile file(project.property('PARKING_KEYSTORE'))
+                storePassword project.property('PARKING_KEYSTORE_PASSWORD')
+                keyAlias project.property('PARKING_KEY_ALIAS')
+                keyPassword project.property('PARKING_KEY_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (project.hasProperty('PARKING_KEYSTORE')) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+// androidbrowserhelper transitively drags in the legacy kotlin-stdlib-jdk7/jdk8 1.6.21
+// artifacts whose classes were merged into the main stdlib in Kotlin 1.8+. Align every
+// kotlin-stdlib module to a single 1.8+ version so the duplicate classes disappear.
+configurations.all {
+    resolutionStrategy.eachDependency { details ->
+        if (details.requested.group == 'org.jetbrains.kotlin'
+                && details.requested.name.startsWith('kotlin-stdlib')) {
+            details.useVersion '1.8.22'
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.browser:browser:1.8.0'
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0'
+}

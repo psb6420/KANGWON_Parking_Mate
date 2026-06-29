@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.gangwon.parkingmate",
+      "sha256_cert_fingerprints": [
+        "64:8C:5A:7B:5E:E6:56:F9:F6:12:82:C0:B4:0C:3E:8A:0C:16:BA:ED:2E:3A:A0:B6:8C:13:2E:0D:A4:7B:13:19"
+      ]
+    }
+  }
+]
