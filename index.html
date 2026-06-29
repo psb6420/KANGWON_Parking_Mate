@@ -1984,13 +1984,12 @@
         }
       }
 
-      // 앱이 켜져 있을 때(포그라운드) 도착한 푸시: OS 팝업 대신 인앱 상태바 + 음성으로 처리
+      // 앱이 켜져 있을 때(포그라운드) 도착한 푸시: OS 알림은 그대로 울리고, 화면 상태바도 갱신
       function handleForegroundParkingAlert(payload) {
         if (!payload) return;
         const data = payload.data || {};
-        const changes = Array.isArray(data.changes) ? data.changes : [];
 
-        // 감시 중인 주차장 현재 현황을 상태바에 라이브로 갱신
+        // 감시 중인 주차장 현재 현황을 상태바에 라이브로 갱신 (시각 표시)
         const lots = Array.isArray(data.lots) ? data.lots : [];
         const summary = lots
           .map((lot) => {
@@ -2002,27 +2001,11 @@
         updatePushWatchStatus(summary || payload.body || "추천 주차장 잔여면이 변경되었습니다.");
         flashPushWatchStatus();
 
-        // 만차 → 경로 변경 제안 (기존 음성 리루팅 플로우 재사용)
+        // 만차 → 경로 변경 제안: 인터랙티브 음성 Q&A 오버레이 (이 경우에만 음성 사용)
         if (data.action === "reroute" && data.nextLot) {
           startRerouteFlow(data);
-          return;
         }
-
-        // 그 외 의미 있는 변동은 음성으로 안내 (확인용 알림 등 변동이 없으면 음성 생략)
-        if (changes.length) {
-          const spoken = changes.length === 1
-            ? spokenForChange(changes[0])
-            : `추천 주차장 ${changes.length}곳의 잔여면이 변경되었습니다.`;
-          if (spoken) speak(spoken);
-        }
-      }
-
-      function spokenForChange(c) {
-        if (!c) return "";
-        if (c.type === "full") return `${c.name}이 만차입니다.`;
-        if (c.type === "opened") return `${c.name}에 빈자리 ${c.current}면이 생겼습니다.`;
-        if (c.type === "low") return `${c.name} 잔여 ${c.current}면, 곧 만차입니다.`;
-        return `${c.name} 잔여 ${c.current}면입니다.`;
+        // 그 외 일반 변동은 OS 알림이 소리로 울리므로 별도 인앱 음성은 생략(중복 방지)
       }
 
       function flashPushWatchStatus() {
@@ -3095,16 +3078,17 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
           const savedLevel = map.getLevel();
           const savedActiveItem = activeParkingItem;
 
+          // preserveView=true: 마커만 다시 그리고 사용자의 줌/이동 상태는 유지
           if (lastDestination) {
             const ranked = rankedParkingRows(allParkingRows, lastDestination, lastRecommendationPreference);
             const within1500 = ranked.filter((lot) => Number.isFinite(lot.destinationDistanceM) && lot.destinationDistanceM <= 1500);
             const refreshedTop = (within1500.length ? within1500 : ranked).slice(0, 3);
-            await renderParkingRows(refreshedTop, lastRecommendationReasons);
+            await renderParkingRows(refreshedTop, lastRecommendationReasons, true);
           } else {
-            await renderParkingRows(refreshedRows);
+            await renderParkingRows(refreshedRows, new Map(), true);
           }
 
-          // 지도 위치/줌 복원
+          // 지도 위치/줌 복원 (preserveView로 이미 유지되지만 안전망)
           map.setCenter(savedCenter);
           map.setLevel(savedLevel);
           // 열려있던 패널 복원
@@ -3153,7 +3137,7 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
         );
       }
 
-      async function renderParkingRows(rows, reasons = new Map()) {
+      async function renderParkingRows(rows, reasons = new Map(), preserveView = false) {
         clearParkingMarkers();
         resultsEl.innerHTML = "";
         visibleParkingRows = [];
@@ -3223,12 +3207,17 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
 
         const center = averagePosition(displayRows.map((row) => row.position));
         latestMapBounds = bounds;
-        map.setBounds(bounds);
-        if (parkingMarkers.length > 1 && map.getLevel() < 6) map.setLevel(6);
-        setTimeout(() => {
-          map.relayout();
+        // preserveView: 갱신 시 사용자가 줌/이동한 지도 상태를 유지(자동 bounds 맞춤 생략)
+        if (!preserveView) {
           map.setBounds(bounds);
           if (parkingMarkers.length > 1 && map.getLevel() < 6) map.setLevel(6);
+        }
+        setTimeout(() => {
+          map.relayout();
+          if (!preserveView) {
+            map.setBounds(bounds);
+            if (parkingMarkers.length > 1 && map.getLevel() < 6) map.setLevel(6);
+          }
           map.setMapTypeId(kakao.maps.MapTypeId.ROADMAP);
         }, 100);
         centerMarker.setMap(null);
