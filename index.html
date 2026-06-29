@@ -1426,9 +1426,92 @@
         padding: 0;
       }
 
+      /* 시작 화면: iOS 안내 인트로 */
+      .ios-intro {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        padding: 32px;
+        text-align: center;
+        background: linear-gradient(160deg, #0b1020 0%, #131a33 100%);
+        color: #eef1fb;
+        opacity: 1;
+        transition: opacity 0.5s ease;
+      }
+      .ios-intro.is-hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+      .ios-intro__mark {
+        width: 64px;
+        height: 64px;
+        border-radius: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 30px;
+        font-weight: 700;
+        background: linear-gradient(135deg, #4f7cff, #6f5bff);
+        box-shadow: 0 10px 30px rgba(79, 124, 255, 0.4);
+      }
+      .ios-intro__title {
+        font-size: 20px;
+        font-weight: 700;
+        margin: 0;
+      }
+      .ios-intro__msg {
+        max-width: 420px;
+        font-size: 14px;
+        line-height: 1.7;
+        color: #c4cbe6;
+        margin: 0;
+      }
+      .ios-intro__msg strong {
+        color: #fff;
+      }
+      .ios-intro__steps {
+        max-width: 420px;
+        text-align: left;
+        font-size: 13px;
+        line-height: 1.7;
+        color: #aab2d4;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        padding: 14px 18px;
+        margin: 0;
+      }
+      .ios-intro__hint {
+        font-size: 12px;
+        color: #7e87a8;
+        margin: 0;
+      }
+
     </style>
   </head>
   <body>
+    <!-- 시작 화면: iOS 전용 안내 (홈 화면 추가 후 사용 권장) -->
+    <div class="ios-intro" id="iosIntro" role="dialog" aria-label="iOS 전용 안내">
+      <div class="ios-intro__mark">P</div>
+      <h1 class="ios-intro__title">강원 Parking Mate</h1>
+      <p class="ios-intro__msg">
+        이 앱은 <strong>iOS(아이폰) 환경에만</strong> 맞춰 구현되어 있습니다.<br />
+        제대로 사용하려면 <strong>Safari에서 홈 화면에 추가</strong>한 뒤
+        홈 화면 아이콘으로 실행해 주세요.
+      </p>
+      <p class="ios-intro__steps">
+        ① Safari 하단의 <strong>공유 버튼</strong>(􀈂)을 누릅니다.<br />
+        ② <strong>홈 화면에 추가</strong>를 선택합니다.<br />
+        ③ 홈 화면에 생긴 <strong>아이콘으로 실행</strong>합니다.
+      </p>
+      <p class="ios-intro__hint">화면을 탭하면 계속합니다.</p>
+    </div>
+
     <main class="app view-home" id="appShell">
       <aside class="sidebar">
         <div class="brand">
@@ -1922,8 +2005,7 @@
           speak(`${nextLot.name}으로 경로를 변경합니다.`);
           await new Promise((r) => setTimeout(r, 1000));
           try {
-            const KakaoSdk = window.Kakao?.Navi ? window.Kakao : await loadKakaoNaviSdk();
-            KakaoSdk.Navi.start({ name: nextLot.name, x: nextLot.lng, y: nextLot.lat, coordType: "wgs84" });
+            await launchKakaoNavi({ name: nextLot.name, x: nextLot.lng, y: nextLot.lat, coordType: "wgs84" });
           } catch (e) {
             setStatus(`카카오내비 실행 실패: ${e.message}`);
           }
@@ -2774,6 +2856,41 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
         return kakaoSdkLoadingPromise;
       }
 
+      function isIosDevice() {
+        return /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+          (/Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+      }
+
+      // 카카오내비 앱을 직접 실행한다.
+      // iOS(특히 홈화면 PWA)에서는 Kakao.Navi.start()가 앱으로 직접 핸드오프되지 못하고
+      // 카카오 안내 페이지(carner)로 빠지므로, 카카오내비 URL 스킴을 직접 호출해 앱으로 바로 진입한다.
+      // 스킴이 동작하지 않으면(앱 미설치 등) 2초 후 기존 SDK 방식으로 폴백한다.
+      async function launchKakaoNavi(destination) {
+        const KakaoSdk = window.Kakao?.Navi ? window.Kakao : await loadKakaoNaviSdk();
+        if (isIosDevice() && clientKakaoKey) {
+          const param = encodeURIComponent(
+            JSON.stringify({
+              name: destination.name,
+              x: destination.x,
+              y: destination.y,
+              coord_type: destination.coordType || "wgs84",
+            }),
+          );
+          let switched = false;
+          const onHide = () => { switched = true; };
+          document.addEventListener("visibilitychange", onHide, { once: true });
+          window.location.href = `kakaonavi-sdk://navigate?param=${param}&apiver=1.0&appkey=${clientKakaoKey}`;
+          window.setTimeout(() => {
+            document.removeEventListener("visibilitychange", onHide);
+            if (!switched && document.visibilityState === "visible") {
+              try { KakaoSdk.Navi.start(destination); } catch {}
+            }
+          }, 2000);
+          return;
+        }
+        KakaoSdk.Navi.start(destination);
+      }
+
       async function loadKakaoNaviSdk() {
         await loadClientConfig();
         if (!clientKakaoKey) {
@@ -2856,11 +2973,8 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
             y: lat,
             coordType: "wgs84",
           };
-          const KakaoSdk = window.Kakao?.Navi
-            ? window.Kakao
-            : await loadKakaoNaviSdk();
           window.__parkingDebug.lastNaviRequest = destination;
-          KakaoSdk.Navi.start(destination);
+          await launchKakaoNavi(destination);
           setStatus(
             watchedLotCount
               ? `${destination.name}으로 길안내를 시작하고 추천 ${watchedLotCount}곳의 잔여면을 감시합니다.`
@@ -3950,6 +4064,25 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
             }
           }
         } catch {}
+      })();
+    </script>
+    <script>
+      // 시작 인트로: 잠깐 보여준 뒤 탭하거나 일정 시간 후 자동으로 닫기
+      (function () {
+        var intro = document.getElementById("iosIntro");
+        if (!intro) return;
+        var dismissed = false;
+        function dismiss() {
+          if (dismissed) return;
+          dismissed = true;
+          intro.classList.add("is-hidden");
+          setTimeout(function () {
+            intro.remove();
+          }, 600);
+        }
+        intro.addEventListener("click", dismiss);
+        // 4초 후 자동으로 닫힘
+        setTimeout(dismiss, 4000);
       })();
     </script>
   </body>
