@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const { getDb } = require("../db");
+const { onArduinoLotUpdate } = require("../services/pushMonitor");
 
 // POST /api/arduino/sensor
 // Arduino에서 주차면 센서 데이터 수신
@@ -28,6 +29,9 @@ router.post("/sensor", (req, res) => {
        sensor_value = excluded.sensor_value,
        updated_at = excluded.updated_at`
   ).run(lot_id, slot_no, is_occupied ? 1 : 0, sensor_value ?? null);
+
+  // 잔여면 수가 실제로 바뀌면 이 lot을 감시 중인 watch에 즉시(디바운스 후) 푸시 평가
+  onArduinoLotUpdate(lot_id);
 
   res.json({ ok: true, lot_id, slot_no, is_occupied: Boolean(is_occupied) });
 });
@@ -65,6 +69,9 @@ router.post("/sensor/batch", (req, res) => {
   });
 
   batchInsert(slots);
+
+  // 배치 반영 후 잔여면 변화 시 한 번만 이벤트 평가
+  onArduinoLotUpdate(lot_id);
 
   res.json({ ok: true, lot_id, updatedCount: slots.length });
 });

@@ -343,142 +343,220 @@ function notificationPayload(watch, changes, snapshot) {
   };
 }
 
+// ── 평가/발송 공유 로직 ─────────────────────────────────────
+// 주기 폴링(runPushMonitor)과 아두이노 이벤트(runPushForLots)가 같은 평가·발송
+// 경로를 공유한다. 모든 평가는 직렬화(withPushLock)되어 같은 watch에 대한
+// 중복 전송/DB 경쟁을 막는다.
+let pushLock = Promise.resolve();
+function withPushLock(fn) {
+  const next = pushLock.then(() => fn());
+  pushLock = next.then(() => {}, () => {});
+  return next;
+}
+
+const WATCH_SELECT = `SELECT w.watch_id, w.endpoint, w.destination_name, w.expires_at,
+        s.p256dh, s.auth,
+        l.management_no, l.name, l.last_available, l.total_spots,
+        l.lat, l.lng, l.ranking, l.is_navigated
+ FROM parking_watch_sessions w
+ JOIN push_subscriptions s ON s.endpoint = w.endpoint
+ JOIN parking_watch_lots l ON l.watch_id = w.watch_id`;
+
+// 활성 watch를 (watchIds가 주어지면 그 집합으로 필터링해) 그룹화해서 반환
+function loadGroupedWatches(db, watchIds) {
+  const now = new Date().toISOString();
+  const rows = watchIds && watchIds.length
+    ? db
+        .prepare(
+          `${WATCH_SELECT}
+           WHERE w.expires_at > ? AND w.watch_id IN (${watchIds.map(() => "?").join(",")})
+           ORDER BY w.watch_id, COALESCE(l.ranking, 99)`,
+        )
+        .all(now, ...watchIds)
+    : db
+        .prepare(
+          `${WATCH_SELECT}
+           WHERE w.expires_at > ?
+           ORDER BY w.watch_id, COALESCE(l.ranking, 99)`,
+        )
+        .all(now);
+
+  const grouped = new Map();
+  for (const row of rows) {
+    if (!grouped.has(row.watch_id)) grouped.set(row.watch_id, { ...row, lots: [] });
+    grouped.get(row.watch_id).lots.push(row);
+  }
+  return grouped;
+}
+
+function managementNosOf(grouped) {
+  return [...new Set([...grouped.values()].flatMap((w) => w.lots.map((l) => l.management_no)))];
+}
+
+// 그룹화된 watch들을 현재 상태(states)와 비교해 변동/만차 재안내를 평가하고 전송
+async function processGroupedWatches(grouped, states, db) {
+  const low = lowSpotsThreshold();
+  const updateState = db.prepare(
+    `UPDATE parking_watch_lots
+     SET last_available = ?, total_spots = ?
+     WHERE watch_id = ? AND management_no = ?`,
+  );
+
+  let notified = 0;
+  for (const watch of grouped.values()) {
+    const changes = [];
+    const baselineUpdates = []; // 현재 상태가 있는 모든 lot의 최신값(기준값 갱신용)
+    for (const lot of watch.lots) {
+      const currentState = states.get(lot.management_no);
+      if (!currentState || currentState.available === null) continue;
+      baselineUpdates.push({
+        managementNo: lot.management_no,
+        available: currentState.available,
+        total: currentState.total,
+      });
+      const previous = integerOrNull(lot.last_available);
+      const type = classifyChange(previous, currentState.available, low);
+      if (type) {
+        changes.push({
+          managementNo: lot.management_no,
+          name: lot.name,
+          previous,
+          current: currentState.available,
+          total: currentState.total,
+          type,
+        });
+      }
+    }
+
+    const applyBaselines = () => {
+      for (const u of baselineUpdates) {
+        updateState.run(u.available, u.total, watch.watch_id, u.managementNo);
+      }
+    };
+
+    // 만차 재안내 대상(fullLot) 선정. 만차이면 잔여면 변동이 없어도 매 주기
+    // 경로 변경을 다시 제안한다(응답하거나 빈자리가 날 때까지 상시 재안내).
+    // - 새 클라이언트: is_navigated로 표시된, 길안내 중인 바로 그 주차장이 만차일 때만
+    // - 구버전(플래그 없음): 만차인 감시 주차장 중 추천순위 최상위를 대상으로 폴백
+    const availableOf = (l) => states.get(l.management_no)?.available;
+    const navigatedLot = watch.lots.find((l) => l.is_navigated);
+    const fullLot = navigatedLot
+      ? (availableOf(navigatedLot) === 0 ? navigatedLot : null)
+      : watch.lots
+          .filter((l) => availableOf(l) === 0)
+          .sort((a, b) => (a.ranking ?? 99) - (b.ranking ?? 99))[0] || null;
+    // 길안내 중인 주차장을 제외한, 이용 가능한(잔여>0) 다른 추천 주차장 중 최상위
+    const nextLot = fullLot
+      ? watch.lots
+          .filter(
+            (l) =>
+              l.management_no !== fullLot.management_no &&
+              l.lat && l.lng &&
+              availableOf(l) > 0,
+          )
+          .sort((a, b) => (a.ranking ?? 99) - (b.ranking ?? 99))[0]
+      : null;
+    const shouldReroute = Boolean(fullLot && nextLot);
+
+    // 보낼 이유가 없으면(잔여면 변동 없음 + 만차 재안내 대상 아님) 기준값만 갱신
+    if (!changes.length && !shouldReroute) {
+      applyBaselines();
+      continue;
+    }
+
+    const snapshot = buildLotsSnapshot(watch, states);
+    // 길안내 중인 주차장이 만차이면 다른 이용 가능한 주차장으로 경로 변경을 반복 제안
+    const payload = shouldReroute
+      ? reroutePayload(watch, fullLot.name, nextLot, snapshot, changes)
+      : notificationPayload(watch, changes, snapshot);
+
+    const subscription = {
+      endpoint: watch.endpoint,
+      keys: { p256dh: watch.p256dh, auth: watch.auth },
+    };
+    try {
+      await webPush.sendNotification(subscription, JSON.stringify(payload), { TTL: 120 });
+      applyBaselines(); // 전송 성공 시에만 기준값 갱신 → 실패 시 다음 평가에 재시도
+      notified += 1;
+    } catch (error) {
+      if (error.statusCode === 404 || error.statusCode === 410) {
+        db.prepare("DELETE FROM push_subscriptions WHERE endpoint = ?").run(watch.endpoint);
+      }
+      console.warn(`[Push] delivery failed: ${error.message}`);
+    }
+  }
+  return notified;
+}
+
+// 주기 폴링: 모든 활성 watch 평가(공공 API lot 포함, 누락 안전망 + 만차 상시 재안내)
 async function runPushMonitor() {
   if (monitorRunning) return { skipped: true };
   monitorRunning = true;
-  const db = getDb();
   try {
-    cleanupExpiredWatches(db);
-    const watchedLots = db
-      .prepare(
-        `SELECT DISTINCT l.management_no
-         FROM parking_watch_lots l
-         JOIN parking_watch_sessions w ON w.watch_id = l.watch_id
-         WHERE w.expires_at > ?`,
-      )
-      .all(new Date().toISOString());
-    if (!watchedLots.length) return { watched: 0, notified: 0 };
-
-    const managementNos = watchedLots.map((row) => row.management_no);
-    const states = await fetchCurrentStates(managementNos, db);
-    const watches = db
-      .prepare(
-        `SELECT w.watch_id, w.endpoint, w.destination_name, w.expires_at,
-                s.p256dh, s.auth,
-                l.management_no, l.name, l.last_available, l.total_spots,
-                l.lat, l.lng, l.ranking, l.is_navigated
-         FROM parking_watch_sessions w
-         JOIN push_subscriptions s ON s.endpoint = w.endpoint
-         JOIN parking_watch_lots l ON l.watch_id = w.watch_id
-         WHERE w.expires_at > ?
-         ORDER BY w.watch_id, COALESCE(l.ranking, 99)`,
-      )
-      .all(new Date().toISOString());
-
-    const grouped = new Map();
-    for (const row of watches) {
-      if (!grouped.has(row.watch_id)) grouped.set(row.watch_id, { ...row, lots: [] });
-      grouped.get(row.watch_id).lots.push(row);
-    }
-
-    const low = lowSpotsThreshold();
-    const updateState = db.prepare(
-      `UPDATE parking_watch_lots
-       SET last_available = ?, total_spots = ?
-       WHERE watch_id = ? AND management_no = ?`,
-    );
-
-    let notified = 0;
-    for (const watch of grouped.values()) {
-      const changes = [];
-      const baselineUpdates = []; // 현재 상태가 있는 모든 lot의 최신값(기준값 갱신용)
-      for (const lot of watch.lots) {
-        const currentState = states.get(lot.management_no);
-        if (!currentState || currentState.available === null) continue;
-        baselineUpdates.push({
-          managementNo: lot.management_no,
-          available: currentState.available,
-          total: currentState.total,
-        });
-        const previous = integerOrNull(lot.last_available);
-        const type = classifyChange(previous, currentState.available, low);
-        if (type) {
-          changes.push({
-            managementNo: lot.management_no,
-            name: lot.name,
-            previous,
-            current: currentState.available,
-            total: currentState.total,
-            type,
-          });
-        }
-      }
-
-      const applyBaselines = () => {
-        for (const u of baselineUpdates) {
-          updateState.run(u.available, u.total, watch.watch_id, u.managementNo);
-        }
-      };
-
-      // 만차 재안내 대상(fullLot) 선정. 만차이면 잔여면 변동이 없어도 매 주기
-      // 경로 변경을 다시 제안한다(응답하거나 빈자리가 날 때까지 30초마다 상시 재안내).
-      // - 새 클라이언트: is_navigated로 표시된, 길안내 중인 바로 그 주차장이 만차일 때만
-      // - 구버전(플래그 없음): 만차인 감시 주차장 중 추천순위 최상위를 대상으로 폴백
-      const availableOf = (l) => states.get(l.management_no)?.available;
-      const navigatedLot = watch.lots.find((l) => l.is_navigated);
-      const fullLot = navigatedLot
-        ? (availableOf(navigatedLot) === 0 ? navigatedLot : null)
-        : watch.lots
-            .filter((l) => availableOf(l) === 0)
-            .sort((a, b) => (a.ranking ?? 99) - (b.ranking ?? 99))[0] || null;
-      // 길안내 중인 주차장을 제외한, 이용 가능한(잔여>0) 다른 추천 주차장 중 최상위
-      const nextLot = fullLot
-        ? watch.lots
-            .filter(
-              (l) =>
-                l.management_no !== fullLot.management_no &&
-                l.lat && l.lng &&
-                availableOf(l) > 0,
-            )
-            .sort((a, b) => (a.ranking ?? 99) - (b.ranking ?? 99))[0]
-        : null;
-      const shouldReroute = Boolean(fullLot && nextLot);
-
-      // 보낼 이유가 없으면(잔여면 변동 없음 + 만차 재안내 대상 아님) 기준값만 갱신
-      if (!changes.length && !shouldReroute) {
-        applyBaselines();
-        continue;
-      }
-
-      const snapshot = buildLotsSnapshot(watch, states);
-      // 길안내 중인 주차장이 만차이면 다른 이용 가능한 주차장으로 경로 변경을 반복 제안
-      const payload = shouldReroute
-        ? reroutePayload(watch, fullLot.name, nextLot, snapshot, changes)
-        : notificationPayload(watch, changes, snapshot);
-
-      const subscription = {
-        endpoint: watch.endpoint,
-        keys: { p256dh: watch.p256dh, auth: watch.auth },
-      };
-      try {
-        await webPush.sendNotification(
-          subscription,
-          JSON.stringify(payload),
-          { TTL: 120 },
-        );
-        applyBaselines(); // 전송 성공 시에만 기준값 갱신 → 실패 시 다음 주기에 재시도
-        notified += 1;
-      } catch (error) {
-        if (error.statusCode === 404 || error.statusCode === 410) {
-          db.prepare("DELETE FROM push_subscriptions WHERE endpoint = ?").run(watch.endpoint);
-        }
-        console.warn(`[Push] delivery failed: ${error.message}`);
-      }
-    }
-    return { watched: grouped.size, notified };
+    return await withPushLock(async () => {
+      const db = getDb();
+      cleanupExpiredWatches(db);
+      const grouped = loadGroupedWatches(db, null);
+      if (!grouped.size) return { watched: 0, notified: 0 };
+      const states = await fetchCurrentStates(managementNosOf(grouped), db);
+      const notified = await processGroupedWatches(grouped, states, db);
+      return { watched: grouped.size, notified };
+    });
   } finally {
     monitorRunning = false;
   }
+}
+
+// 이벤트 기반: 특정 lot(아두이노)을 감시하는 watch만 즉시 평가·발송
+async function runPushForLots(lotIds) {
+  const ids = [...new Set((lotIds || []).map((s) => String(s || "").trim()).filter(Boolean))];
+  if (!ids.length) return { watched: 0, notified: 0 };
+  return withPushLock(async () => {
+    const db = getDb();
+    cleanupExpiredWatches(db);
+    const watchRows = db
+      .prepare(
+        `SELECT DISTINCT w.watch_id
+         FROM parking_watch_sessions w
+         JOIN parking_watch_lots l ON l.watch_id = w.watch_id
+         WHERE w.expires_at > ? AND l.management_no IN (${ids.map(() => "?").join(",")})`,
+      )
+      .all(new Date().toISOString(), ...ids);
+    if (!watchRows.length) return { watched: 0, notified: 0 };
+    const grouped = loadGroupedWatches(db, watchRows.map((r) => r.watch_id));
+    if (!grouped.size) return { watched: 0, notified: 0 };
+    const states = await fetchCurrentStates(managementNosOf(grouped), db);
+    const notified = await processGroupedWatches(grouped, states, db);
+    return { watched: grouped.size, notified };
+  });
+}
+
+// ── 아두이노 센서 변화 → 디바운스 후 즉시 평가 ──────────────
+const ARDUINO_EVENT_DEBOUNCE_MS = 2500;
+const arduinoEvent = { timer: null, lots: new Set(), lastAvailable: new Map() };
+
+// 아두이노 라우트에서 센서 upsert 직후 호출. 해당 lot의 잔여면 수가 실제로
+// 바뀐 경우에만 디바운스 타이머에 등록 → 묶음 평가로 센서 깜빡임 스팸 방지.
+function onArduinoLotUpdate(lotId) {
+  const id = String(lotId || "").trim();
+  if (!id) return;
+  const state = arduinoStateForLot(getDb(), id);
+  if (!state) return;
+  const prev = arduinoEvent.lastAvailable.get(id);
+  arduinoEvent.lastAvailable.set(id, state.available);
+  if (prev === state.available) return; // 잔여면 변화 없음 → 무시
+
+  arduinoEvent.lots.add(id);
+  if (arduinoEvent.timer) clearTimeout(arduinoEvent.timer);
+  arduinoEvent.timer = setTimeout(() => {
+    const lots = [...arduinoEvent.lots];
+    arduinoEvent.lots.clear();
+    arduinoEvent.timer = null;
+    runPushForLots(lots).catch((error) =>
+      console.error(`[Push] arduino-event failed: ${error.message}`),
+    );
+  }, ARDUINO_EVENT_DEBOUNCE_MS);
+  arduinoEvent.timer.unref?.();
 }
 
 function startPushMonitor() {
@@ -503,5 +581,7 @@ module.exports = {
   registerWatch,
   stopWatch,
   runPushMonitor,
+  runPushForLots,
+  onArduinoLotUpdate,
   startPushMonitor,
 };
