@@ -49,8 +49,14 @@ self.addEventListener("push", (event) => {
       const significant =
         isReroute || changes.some((c) => c.type === "full" || c.type === "opened");
 
+      // 만차 → 경로 변경 제안은 질문 문구(payload.body)를 본문으로,
+      // 그 외 일반 변동은 감시 중인 주차장 현황(liveSummary)을 본문으로
+      const notificationBody = isReroute
+        ? payload.body || liveSummary || "만차입니다. 다른 주차장으로 안내할까요?"
+        : liveSummary || payload.body || "추천 주차장의 잔여면을 확인하세요.";
+
       return self.registration.showNotification(payload.title || "강원 Parking Mate", {
-        body: liveSummary || payload.body || "추천 주차장의 잔여면을 확인하세요.",
+        body: notificationBody,
         tag: payload.tag || "parking-watch", // 같은 watch는 같은 알림으로 갱신(누적 X)
         renotify: significant,
         silent: !significant,
