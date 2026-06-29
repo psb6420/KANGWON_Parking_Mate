@@ -717,8 +717,9 @@ async function analyzeParkingIntent(text) {
         ],
         generationConfig: {
           temperature: 0.2,
-          maxOutputTokens: 180,
+          maxOutputTokens: 256,
           responseMimeType: "application/json",
+          thinkingConfig: { thinkingBudget: 0 },
         },
       }),
     });
@@ -766,6 +767,7 @@ async function analyzeParkingReasons(destination, lots) {
         temperature: 0.3,
         maxOutputTokens: 1500,
         responseMimeType: "application/json",
+        thinkingConfig: { thinkingBudget: 0 },
       },
     }),
   });
@@ -824,7 +826,7 @@ async function proxyInterpretYesNo(req, res) {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0, maxOutputTokens: 20, responseMimeType: "application/json" },
+        generationConfig: { temperature: 0, maxOutputTokens: 40, responseMimeType: "application/json", thinkingConfig: { thinkingBudget: 0 } },
       }),
     });
     const data = await response.json();
