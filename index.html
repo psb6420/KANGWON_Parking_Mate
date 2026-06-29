@@ -1486,10 +1486,35 @@
         padding: 14px 18px;
         margin: 0;
       }
-      .ios-intro__hint {
-        font-size: 12px;
-        color: #7e87a8;
-        margin: 0;
+      .ios-intro__actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: center;
+        margin-top: 4px;
+      }
+      .ios-intro__btn {
+        font-size: 14px;
+        font-weight: 600;
+        padding: 11px 22px;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: rgba(255, 255, 255, 0.06);
+        color: #dfe4f5;
+        cursor: pointer;
+        transition: background 0.2s ease, opacity 0.2s ease;
+      }
+      .ios-intro__btn:hover {
+        background: rgba(255, 255, 255, 0.12);
+      }
+      .ios-intro__btn--primary {
+        border-color: transparent;
+        background: linear-gradient(135deg, #4f7cff, #6f5bff);
+        color: #fff;
+      }
+      .ios-intro__btn--primary:hover {
+        opacity: 0.92;
+        background: linear-gradient(135deg, #4f7cff, #6f5bff);
       }
 
     </style>
@@ -1509,7 +1534,14 @@
         ② <strong>홈 화면에 추가</strong>를 선택합니다.<br />
         ③ 홈 화면에 생긴 <strong>아이콘으로 실행</strong>합니다.
       </p>
-      <p class="ios-intro__hint">화면을 탭하면 계속합니다.</p>
+      <div class="ios-intro__actions">
+        <button class="ios-intro__btn ios-intro__btn--primary" type="button" id="iosIntroClose">
+          닫기
+        </button>
+        <button class="ios-intro__btn" type="button" id="iosIntroNeverShow">
+          다시 보지 않기
+        </button>
+      </div>
     </div>
 
     <main class="app view-home" id="appShell">
@@ -2861,10 +2893,50 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
           (/Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
       }
 
-      // 카카오내비 앱 실행. (iOS 직접 스킴 호출은 "유효하지 않은 URL"로 실패해 제거,
-      // 기존 Kakao SDK 방식으로 복구)
+      // 카카오내비 앱을 직접 실행한다.
+      // iOS(특히 홈화면 PWA)에서 Kakao.Navi.start()는 숨김 iframe으로 스킴을 띄우다 실패해
+      // 안내 페이지(carner)로 빠진다. 그래서 카카오 JS SDK가 만드는 것과 "동일한 형식"의
+      // 스킴 URL을 직접 구성해 location.href로 호출한다.
+      // (param은 평면이 아니라 {destination, option} 중첩 구조 + extras.KA + appkey/apiver 필요)
       async function launchKakaoNavi(destination) {
         const KakaoSdk = window.Kakao?.Navi ? window.Kakao : await loadKakaoNaviSdk();
+        if (isIosDevice() && clientKakaoKey) {
+          const ka =
+            [
+              "sdk/2.8.1",
+              "os/javascript",
+              "sdk_type/javascript",
+              "lang/" + (navigator.language || "ko-KR"),
+              "device/" + String(navigator.platform || "").replace(/ /g, "_"),
+              "origin/" + encodeURIComponent(location.origin),
+            ].join(" ") + " app_key/" + clientKakaoKey;
+
+          const query =
+            "appkey=" + encodeURIComponent(clientKakaoKey) +
+            "&apiver=1.0" +
+            "&extras=" + encodeURIComponent(JSON.stringify({ KA: ka })) +
+            "&param=" + encodeURIComponent(JSON.stringify({
+              destination: { name: destination.name, x: destination.x, y: destination.y },
+              option: {
+                coord_type: destination.coordType || "wgs84",
+                vehicle_type: 1,
+                rpoption: 100,
+                route_info: false,
+              },
+            }));
+
+          let switched = false;
+          const onHide = () => { switched = true; };
+          document.addEventListener("visibilitychange", onHide, { once: true });
+          window.location.href = "kakaonavi-sdk://navigate?" + query;
+          window.setTimeout(() => {
+            document.removeEventListener("visibilitychange", onHide);
+            if (!switched && document.visibilityState === "visible") {
+              try { KakaoSdk.Navi.start(destination); } catch {}
+            }
+          }, 2000);
+          return;
+        }
         KakaoSdk.Navi.start(destination);
       }
 
@@ -4044,10 +4116,20 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
       })();
     </script>
     <script>
-      // 시작 인트로: 잠깐 보여준 뒤 탭하거나 일정 시간 후 자동으로 닫기
+      // 시작 인트로: 닫기 버튼 / 다시 보지 않기 버튼으로만 닫힘 (자동 닫힘 없음)
       (function () {
         var intro = document.getElementById("iosIntro");
         if (!intro) return;
+        var STORAGE_KEY = "iosIntroDismissed";
+
+        // '다시 보지 않기'를 선택한 적이 있으면 인트로를 아예 표시하지 않음
+        try {
+          if (localStorage.getItem(STORAGE_KEY) === "1") {
+            intro.remove();
+            return;
+          }
+        } catch {}
+
         var dismissed = false;
         function dismiss() {
           if (dismissed) return;
@@ -4057,9 +4139,18 @@ const ranked = rankedParkingRows(allParkingRows, destination, parsed.preference)
             intro.remove();
           }, 600);
         }
-        intro.addEventListener("click", dismiss);
-        // 4초 후 자동으로 닫힘
-        setTimeout(dismiss, 4000);
+
+        var closeBtn = document.getElementById("iosIntroClose");
+        var neverBtn = document.getElementById("iosIntroNeverShow");
+        if (closeBtn) closeBtn.addEventListener("click", dismiss);
+        if (neverBtn) {
+          neverBtn.addEventListener("click", function () {
+            try {
+              localStorage.setItem(STORAGE_KEY, "1");
+            } catch {}
+            dismiss();
+          });
+        }
       })();
     </script>
   </body>
