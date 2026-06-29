@@ -2513,7 +2513,7 @@
             const comfortScore = ratio;
             const score =
               preference === "near"
-                ? distanceScore * 0.80 + comfortScore * 0.20
+                ? distanceScore // 가까움: 거리만 사용 (쾌적 가중 제외 → 가장 가까운 순, 잔여면수는 표시만)
                 : preference === "comfort"
                   ? comfortScore * 0.80 + distanceScore * 0.20
                   : comfortScore * 0.60 + distanceScore * 0.40;
